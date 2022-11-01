@@ -1,6 +1,8 @@
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import vpython
 
 class Mass:
 
@@ -46,8 +48,8 @@ class Simulation:
                 springs.append(Spring(length, self.spring_k, [mass_idx1, mass_idx2]))
         return(springs)
 
-    def plot_cube(self):
-        ax = plt.axes(projection ='3d')
+    def plot_cube(self,ax):
+
         
         #ax = fig.add_subplot(111,projection='3d')
 
@@ -67,12 +69,8 @@ class Simulation:
             ys = [self.masses[i].position[1] for i in spring.mass_indices]
             zs = [self.masses[i].position[2] for i in spring.mass_indices]
             ax.plot3D(xs, ys, zs, "green")
-            plt.xlim((-2,1.3))
-            plt.xlabel("X")
-            plt.ylim((-2,1.3))
-            plt.ylabel("Y")
-            ax.set_zlim(-2,1.3)
-        plt.pause(.1)
+
+        
  
     def interact(self):
         for s in self.springs:
@@ -112,11 +110,20 @@ class Simulation:
 
     def run_simulation(self):
         self.masses[0].f_ext.append(np.array([0,100,0]))
+        ax = plt.axes(projection ='3d')
+        plt.xlim((-2,1.3))
+        plt.xlabel("X")
+        plt.ylim((-2,1.3))
+        plt.ylabel("Y")
+        ax.set_zlim(-2,1.3)
         times = np.arange(0,self.final_T, 0.03)
         for t in np.arange(0,self.final_T, self.increment):
             self.interact()
             if t in times:
-                self.plot_cube()
+                start = time.time()
+                self.plot_cube(ax)
+                print(time.time()-start)
+                plt.pause(.01)
             
         plt.show()
 
@@ -134,3 +141,5 @@ if __name__ == "__main__":
     a.run_simulation()
     #a.plot_cube()
     #plt.show()
+    #vpython.sphere()
+
