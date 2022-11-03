@@ -2,7 +2,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-import vpython
+from vpython import *
 
 class Mass:
 
@@ -48,31 +48,9 @@ class Simulation:
                 springs.append(Spring(length, self.spring_k, [mass_idx1, mass_idx2]))
         return(springs)
 
-    def plot_cube(self,ax):
-
-        
-        #ax = fig.add_subplot(111,projection='3d')
-
-        xx, yy = np.meshgrid(np.linspace(-2,1.3,100), np.linspace(-2,1.3,100))
-        z = (xx-xx) +(yy-yy) -2
-
-
-        # plot the plane
-        ax.plot_surface(xx, yy, z, alpha=0.5, color = "blue")
-
-        #plt.show()
-        for mass in self.masses:
-            ax.plot3D(mass.position[0], mass.position[1], mass.position[2], "ro")
-            
-        for spring in self.springs:
-            xs = [self.masses[i].position[0] for i in spring.mass_indices]
-            ys = [self.masses[i].position[1] for i in spring.mass_indices]
-            zs = [self.masses[i].position[2] for i in spring.mass_indices]
-            ax.plot3D(xs, ys, zs, "green")
-
         
  
-    def interact(self):
+    def interact(self,floor=-4,breath=False):
         for s in self.springs:
             l = self.get_spring_l(s)
             l_vect = np.array( self.masses[s.mass_indices[1]].position -  self.masses[s.mass_indices[0]].position  )
@@ -90,9 +68,10 @@ class Simulation:
             self.masses[s.mass_indices[1]].f_ext.append( np.array([f_kx, f_ky, f_kz]) )
 
         for m in self.masses:
-            if m.position[2] < -2:
-                m.f_ext.append(np.array([0,0,-100000*(m.position[2]+2)])) #hit the floor
-            m.f_ext.append(np.array([0,0,-9.81])) #gravity
+            if not breath:
+                if m.position[1] < floor:
+                    m.f_ext.append(np.array([0,-100000*(m.position[1]-floor),0])) #hit the floor
+                m.f_ext.append(np.array([0,-9.81,0])) #gravity
 
             f_netx = sum([force[0] for force in m.f_ext])
             f_nety = sum([force[1] for force in m.f_ext])
@@ -109,23 +88,21 @@ class Simulation:
         mass.f_ext = []
 
     def run_simulation(self):
-        self.masses[0].f_ext.append(np.array([0,100,0]))
-        ax = plt.axes(projection ='3d')
-        plt.xlim((-2,1.3))
-        plt.xlabel("X")
-        plt.ylim((-2,1.3))
-        plt.ylabel("Y")
-        ax.set_zlim(-2,1.3)
-        times = np.arange(0,self.final_T, 0.03)
+        self.masses[0].f_ext.append(np.array([300,300,0]))
+        m_obs, s_obs = self.initialize_scene(z=-4.06)
+        time.sleep(20)
+        
+        times = np.arange(0,self.final_T, 0.02)
         for t in np.arange(0,self.final_T, self.increment):
             self.interact()
             if t in times:
+                rate(50)
                 start = time.time()
-                self.plot_cube(ax)
+                self.update_scene(m_obs, s_obs)
                 print(time.time()-start)
-                plt.pause(.01)
-            
-        plt.show()
+                
+         
+       
 
     def get_spring_l(self, spring):
         m1_idx1 = spring.mass_indices[0]
@@ -135,11 +112,60 @@ class Simulation:
         length = np.linalg.norm(m2_p-m1_p)
         return(length)
             
+    def initialize_scene(self,z, breath=False):
+        # walls
+        if not breath:
+            floor = box(pos=vector(0.5,z-0.06,0), height=0.02, length=7, width=7,color=color.white)
+
+        m_plots = []
+        for mass in self.masses:
+            m_temp = sphere(pos=vector(mass.position[0],mass.position[1],mass.position[2]), radius=0.06, color=color.green)
+            m_plots.append(m_temp)
+
+        s_plots = []
+        for spring in self.springs:
+            m1_pos = self.masses[spring.mass_indices[0]].position
+            m2_pos = self.masses[spring.mass_indices[1]].position
+            s_temp = cylinder(pos=vector(m1_pos[0], m1_pos[1], m1_pos[2]), axis=vector(m2_pos[0]-m1_pos[0], m2_pos[1]-m1_pos[1], m2_pos[2]-m1_pos[2]), length=self.get_spring_l(spring),color=color.red, radius=0.01)
+            s_plots.append(s_temp)
+
+        return(m_plots,s_plots)
+
+    def update_scene(self, m_plots, s_plots):
+        for idx,m in enumerate(m_plots):
+            m.pos = vector(self.masses[idx].position[0], self.masses[idx].position[1], self.masses[idx].position[2])
+        
+        for idx,s in enumerate(s_plots):
+            m1_pos = self.masses[self.springs[idx].mass_indices[0]].position
+            m2_pos = self.masses[self.springs[idx].mass_indices[1]].position
+            s.pos = vector(m1_pos[0], m1_pos[1], m1_pos[2])
+            s.axis = vector(m2_pos[0]-m1_pos[0], m2_pos[1]-m1_pos[1], m2_pos[2]-m1_pos[2])
+            s.length=self.get_spring_l(self.springs[idx])
+
+    def cube_breath(self):
+        m_obs, s_obs = self.initialize_scene(z=0,breath=True)
+        time.sleep(20)
+        
+        times = np.arange(0,self.final_T, 0.02)
+        for t in np.arange(0,self.final_T, self.increment):
+            for s in self.springs:
+                s.rest_length += np.sin(5000*t)
+            self.interact(floor = 0.01,breath=True)
+            for s in self.springs:
+                s.rest_length -= np.sin(5000*t)
+            if t in times:
+                rate(50)
+                start = time.time()
+                self.update_scene(m_obs, s_obs)
+                print(time.time()-start)
+
+
 
 if __name__ == "__main__":
-    a = Simulation(dt=0.001,T=5, w_masses=0.1, k_springs=10000)
+    a = Simulation(dt=0.0004,T=8, w_masses=0.1, k_springs=5000)
     a.run_simulation()
-    #a.plot_cube()
-    #plt.show()
-    #vpython.sphere()
+    # a.cube_breath()
+
+
+
 
