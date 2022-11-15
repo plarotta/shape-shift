@@ -13,6 +13,7 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include<cmath>
 
 using namespace std;
 
@@ -47,13 +48,17 @@ class Spring{
     public:
 
     int idcs[2];
-    map <char,double> constants;
+    
     double rest_length;
     double spring_constant;
-
-    Spring(int id[], map <char,double> c, double l0, double k){
+    map <char,double> constants;
+    //constants['a']=rest_length; // { {"a",rest_length},{"b",0},{"c",0},{"k",spring_constant} };
+    
+    constants.insert(pair<char, double>("a", rest_length));
+    
+    Spring(int id[], double l0, double k){
         idcs[0] = id[0];
-        constants = c;
+        idcs[1] = id[1];
         rest_length = l0;
         spring_constant = k;
     }
@@ -78,7 +83,7 @@ class Simulation{
         final_T = T;
         spring_k = k;
         masses = initialize_masses();
-        springs = 2; //initialize_springs();
+        springs = initialize_springs();
         mu_static = mu_s;
         mu_kinetic = mu_k;
     }   
@@ -94,27 +99,55 @@ vector<Mass> Simulation::initialize_masses(){
         for (int y = 0; y < 2; y++){
             for (int z = 0; z < 2; z++){
                 double p[] = {x,y,z};
+                // cout<<p[0]<<","<<p[1]<<","<<p[2] <<endl;
                 output.push_back(Mass(0.1,p,v,a,f));
             }
         }
     }
-    return(output);
+    return output;
 }
 
-// vector<Spring> Simulation::initialize_springs(){
-//     vector<Spring> a = 
-// }
+vector<Spring> Simulation::initialize_springs(){
+    vector<Spring> output;
+    for (int mass_idx1 =0; mass_idx1<masses.size();mass_idx1++) {
+        for (int mass_idx2 =mass_idx1+1; mass_idx2<masses.size();mass_idx2++) {
+            cout<<mass_idx1<<","<<mass_idx2<<endl;
+            double m1_p[3];
+            m1_p[0]=masses[mass_idx1].position[0];
+            m1_p[1]=masses[mass_idx1].position[1];
+            m1_p[2]=masses[mass_idx1].position[2];
+            double m2_p[3];
+            m2_p[0]=masses[mass_idx2].position[0];
+            m2_p[1]=masses[mass_idx2].position[1];
+            m2_p[2]=masses[mass_idx2].position[2];
+
+            double length=get_vect_length(m1_p,m2_p);
+            int indcs[2] = {mass_idx1,mass_idx2};
+
+            output.push_back(Spring(indcs,length,spring_k);
+
+        }
+
+    }
+}
 
 
-
+double get_vect_length(double v1[], double v2[]){
+    double res = sqrt(pow(v2[0]-v1[0],2) + pow(v2[1]-v1[1],2) + pow(v2[2]-v1[2],2));
+    return res;
+}
 
 
 
 int main()
 {
     Simulation sim(0.2,5,10000, 0.8,0.6);
-    vector<Mass> vi = sim.masses;
-    for (int i : vi){ 
-        cout << vi[i].position[0] <<","<< vi[i].position[1]<< ","<< vi[i].position[2] <<endl;
+    
+    for (i=0,i<sim.springs.size();i++){
+        cout<<"length"<<sim.springs[i].length<<endl;
+        cout<<"mass indices ["<<sim.springs[i].idcs[0]<<","<<sim.springs[i].idcs[1]<<"]"<<endl;
     }
+
+    
+
 }

@@ -409,11 +409,10 @@ class Evolution():
         individual = []
         num_springs = len(self.springs)
         for s in range(num_springs):
-                # random.random() *(upper - lower) + lower
-                b = 0.1#random.random() *(1 - 0) + 0
+                # random.random() *(upper - lower) + lower generates a random rational number in the range (lower,upper)
+                b = random.random() *(1 - 0) + 0
                 c = random.random() *(2*pi - 0) + 0
                 k = random.random() *(100000 - 0) + 0
-                #print([b,c,k])
                 individual.append((b,c,k))
         return(individual)
 

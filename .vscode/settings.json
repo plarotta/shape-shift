@@ -6,6 +6,9 @@
         "filesystem": "cpp",
         "random": "cpp",
         "vector": "cpp",
-        "map": "cpp"
+        "map": "cpp",
+        "__node_handle": "cpp",
+        "complex": "cpp",
+        "cmath": "cpp"
     }
 }
