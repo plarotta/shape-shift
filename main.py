@@ -79,9 +79,18 @@ class Simulation:
             
             m.f_ext.append(np.array([0,-9.81,0])) #gravity
 
-            f_netx = sum([force[0] for force in m.f_ext])
-            f_nety = sum([force[1] for force in m.f_ext])
-            f_netz = sum([force[2] for force in m.f_ext])
+            f_netx=0
+            f_nety=0
+            f_netz=0
+
+            for f in m.f_ext:
+                f_netx+=f[0]
+                f_nety+=f[1]
+                f_netz+=f[2]
+
+            # f_netx = sum([force[0] for force in m.f_ext])
+            # f_nety = sum([force[1] for force in m.f_ext])
+            # f_netz = sum([force[2] for force in m.f_ext])
 
             if m.position[1] <= floor:
                 Fp = np.array([f_netx, 0, f_netz])
@@ -93,6 +102,8 @@ class Simulation:
                     f_netz += -f_netz
                 else:
                     dirFn = self.mu_kinetic*Fn_norm*np.array([f_netx, 0, f_netz])/Fp_norm
+                    f_netx+=dirFn[0]
+                    f_netz+=dirFn[2]
                     f_netx = sum([force[0] for force in m.f_ext])
                     f_netz = sum([force[2] for force in m.f_ext])
                     
@@ -173,7 +184,7 @@ class Simulation:
         COM.pos = vector(COM_pos[0],COM_pos[1],COM_pos[2])
 
     def run_simulation(self,plot_energies=False):
-        # self.masses[0].f_ext.append(np.array([3000,30000,0]))
+        self.masses[0].f_ext.append(np.array([3000,60000,4000]))
         m_obs, s_obs, COM = self.initialize_scene(z=-0.06)
         time.sleep(10)
         
@@ -200,6 +211,7 @@ class Simulation:
         return(np.array([COMx, COMy, COMz]))
 
 def eval_springs(springs, render = False):
+    start = time.time()
     sim = Simulation(dt=0.0002,T=4, w_masses=0.1, k_springs=10000)
 
     print("call to eval")
@@ -214,6 +226,7 @@ def eval_springs(springs, render = False):
         for t in np.arange(0, sim.final_T, sim.increment):
             sim.interact(t,floor=-4)
         p2 = sim.get_COM()
+        print("eval time: ", time.time()-start)
         return(np.linalg.norm(np.array([p2[0],0,p2[2]])-np.array([p1[0],0,p1[2]])))
 
 
@@ -349,8 +362,8 @@ def evolve_robot2(n_gen):
         population_pool = list(reversed(population_pool))
         print("Gen best: ",max(fits))
         best_fits.append(max(fits))
-    #input("Render best solution?")
-    #eval_springs(population_pool[0], render=True)
+    input("Render best solution?")
+    eval_springs(population_pool[0], render=True)
     
     return(population_pool[0],best_fits)
 
@@ -358,7 +371,7 @@ def evolve_robot2(n_gen):
 class Evolution():
     def __init__(self, springs, ngen):
         self.generations = ngen
-        self.population_size = 30
+        self.population_size = 5
         self.mutation_rate = 0.2
         self.crossover_rate = 0.75
         self.springs = springs
@@ -475,7 +488,8 @@ class Evolution():
 
 
 if __name__ == "__main__":
-    # a = Simulation(dt=0.0002,T=5, w_masses=0.1, k_springs=10000)
+    a = Simulation(dt=0.0002,T=5, w_masses=0.1, k_springs=10000)
+    a.run_simulation()
     # springs = a.springs
     # b = Evolution(springs,10)
     # pop = b.initialize_population()
@@ -487,13 +501,13 @@ if __name__ == "__main__":
     # print(a.eval_springs(indiv))
     # b.mutate_individual(indiv)
     # print(a.eval_springs(indiv))
-    best_pal, best_fits = evolve_robot2(100)
+    # best_pal, best_fits = evolve_robot2(5)
 
-    with open('best_indiv.pkl', 'wb') as f:
-        pickle.dump(best_pal, f)
+    # with open('best_indiv.pkl', 'wb') as f:
+    #     pickle.dump(best_pal, f)
 
-    with open('all_fits.pkl', 'wb') as f:
-        pickle.dump(best_fits, f)
+    # with open('all_fits.pkl', 'wb') as f:
+    #     pickle.dump(best_fits, f)
 
 
     # print(best_pal, '\n')
