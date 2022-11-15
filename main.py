@@ -5,6 +5,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from vpython import *
 import secrets
 import random
+import copy
+import pickle
 
 class Mass:
 
@@ -34,7 +36,7 @@ class Simulation:
         self.spring_k = k_springs
         self.masses = self.initialize_masses()
         self.springs = self.initialize_springs()
-        self.mu_static = 0.67
+        self.mu_static = 0.87
         self.mu_kinetic = 0.47
     
     def initialize_masses(self):
@@ -64,7 +66,7 @@ class Simulation:
         for s in self.springs:
             l = self.get_spring_l(s)
             l_vect = np.array( self.masses[s.mass_indices[1]].position -  self.masses[s.mass_indices[0]].position  )
-            L0 = s.constants["a"] + s.constants["b"] * np.sin(10*t + s.constants["c"])
+            L0 = s.constants["a"] + s.constants["b"] * np.sin(5*t + s.constants["c"])
             f_k = s.spring_constant * (l - L0)
             f_kx = f_k * l_vect[0]/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
             f_ky = f_k * l_vect[1]/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
@@ -171,8 +173,8 @@ class Simulation:
         COM.pos = vector(COM_pos[0],COM_pos[1],COM_pos[2])
 
     def run_simulation(self,plot_energies=False):
-        self.masses[0].f_ext.append(np.array([3000,3000,0]))
-        m_obs, s_obs, COM = self.initialize_scene(z=-4.06)
+        # self.masses[0].f_ext.append(np.array([3000,30000,0]))
+        m_obs, s_obs, COM = self.initialize_scene(z=-0.06)
         time.sleep(10)
         
         times = np.arange(0,self.final_T, 0.02)
@@ -183,7 +185,7 @@ class Simulation:
                 spre, mase = self.calc_energy()
                 energies["springs"].append(spre)
                 energies["masses"].append(mase)
-            self.interact(t,floor=-4)
+            self.interact(t,floor=0)
             if t in times:
                 rate(50)
                 self.update_scene(m_obs, s_obs, COM)
@@ -197,16 +199,22 @@ class Simulation:
         COMz = sum([m.mass*m.position[2] for m in self.masses])/M
         return(np.array([COMx, COMy, COMz]))
 
-    def eval_springs(self, springs):
-        for idx in range(len(self.springs)):
-            self.springs[idx].constants["b"] = springs[idx][0]
-            self.springs[idx].constants["c"] = springs[idx][1]
-            self.springs[idx].constants["k"] = springs[idx][2]
-        p1 = self.get_COM()
-        for t in np.arange(0, self.final_T, self.increment):
-            self.interact(t,floor=-4)
-        p2 = self.get_COM()
-        return(np.linalg.norm([p2[0],0,p2[2]]-[p1[0],0,p1[2]]))
+def eval_springs(springs, render = False):
+    sim = Simulation(dt=0.0002,T=4, w_masses=0.1, k_springs=10000)
+
+    print("call to eval")
+    for idx in range(len(sim.springs)):
+        sim.springs[idx].constants["b"] = springs[idx][0]
+        sim.springs[idx].constants["c"] = springs[idx][1]
+        sim.springs[idx].constants["k"] = springs[idx][2]
+    if render:
+        sim.run_simulation()
+    else:
+        p1 = sim.get_COM()
+        for t in np.arange(0, sim.final_T, sim.increment):
+            sim.interact(t,floor=-4)
+        p2 = sim.get_COM()
+        return(np.linalg.norm(np.array([p2[0],0,p2[2]])-np.array([p1[0],0,p1[2]])))
 
 
 
@@ -220,7 +228,7 @@ def evolve_robot(n_gen):
 
     #initialize population [done]
     #loop
-        #select
+        #select [done]
         #breed [done]
         #mutate [done]
     #return best indiv
@@ -250,41 +258,183 @@ def evolve_robot(n_gen):
     -child2: complement of child2
     
     '''
-    pass
+    sim = Simulation(dt=0.0002,T=3, w_masses=0.1, k_springs=10000)
+    springs = sim.springs
+    evolve = Evolution(springs=springs, ngen=n_gen)
+    population_pool = evolve.initialize_population()
+    
+    
+    fits = [eval_springs(i) for i in population_pool]
+    population_pool = [population_pool[i] for i in np.argsort(fits)]
+    population_pool = list(reversed(population_pool))
+    next_gen = []
+    best_fits = []
+    # eval_springs(population_pool[0],True)
+    # raise ValueError
+
+
+    for i in range(evolve.generations):
+        print("Began generation ", i, "...")
+        population_pool = population_pool[:int(len(population_pool)/2)]
+        while len(next_gen) < evolve.population_size:
+            
+            parents = evolve.ranked_selection(population_pool, 0.2)
+            children = evolve.breed(parents)
+            children = [evolve.mutate_individual(c) for c in children]
+            [next_gen.append(p) for p in parents]
+            [next_gen.append(c) for c in children]
+        print("Done making next generation.")
+        population_pool = [i for i in next_gen]
+        fits = [eval_springs(i) for i in population_pool]
+        population_pool = [population_pool[i] for i in np.argsort(fits)]
+        population_pool = list(reversed(population_pool))
+        gen_best = max(fits)
+        print("Longest distance in generation was ",gen_best)
+        best_fits.append(gen_best)
+        next_gen = []
+    input("Render best solution?")
+    eval_springs(population_pool[0], render=True)
+    
+    return(best_fits, population_pool[0])
+    
+
+
+def evolve_robot2(n_gen):
+     # initialize starting population
+    # calculate the fitnesses for the population and sort population accordingly
+
+    # repeat for each generation
+        # initialize set for storing the individuals for the next generation
+        # repeat until the population for the next generation is ready
+            # select 2 parents from current generation
+            # crossover the 2 parents
+            # select who moves to the next generation via deterministic crowding
+            # add the 2 diverse and fit bois to the next generation's population
+        # replace the current generation population with the next generation's population
+        # calculate the fitnesses for the population and sort population accordingly
+        # check generation diversity
+        # store the value of the best fitness of the generation
+    
+    #return the best individual of the latest generation
+    sim = Simulation(dt=0.0002,T=3, w_masses=0.1, k_springs=10000)
+    springs = sim.springs
+    evolve = Evolution(springs=springs, ngen=n_gen)
+    population_pool = evolve.initialize_population()
+    # eval_springs(population_pool[0],True)
+    # raise ValueError
+    
+    fits = [eval_springs(i) for i in population_pool]
+    print("succeeded first set of evals")
+    
+    population_pool = [population_pool[i] for i in np.argsort(fits)]
+    population_pool = list(reversed(population_pool))
+    next_gen = []
+    best_fits = []
+
+    for i in range(n_gen):
+        print("Starting generation ", str(i+1),"...")
+        next_gen = set()
+        while len(next_gen) < evolve.population_size:
+            #print('len =', len(next_gen))
+            parents = evolve.ranked_selection(population_pool, 0.2)
+            children = evolve.breed(parents)
+            evolve.det_crowd(next_gen,parents,children,population_pool,sim)
+            next_gen.add(tuple(evolve.spawn_individual()))
+            next_gen.add(tuple(evolve.spawn_individual()))
+
+        
+        population_pool = [list(i) for i in next_gen] 
+        fits = [eval_springs(i) for i in population_pool]
+        population_pool = [population_pool[i] for i in np.argsort(fits)]
+        population_pool = list(reversed(population_pool))
+        print("Gen best: ",max(fits))
+        best_fits.append(max(fits))
+    #input("Render best solution?")
+    #eval_springs(population_pool[0], render=True)
+    
+    return(population_pool[0],best_fits)
 
 
 class Evolution():
-    def __init__(self, springs):
-        self.generations = 10
-        self.population_size = 10
-        self.mutation_rate = 1
+    def __init__(self, springs, ngen):
+        self.generations = ngen
+        self.population_size = 30
+        self.mutation_rate = 0.2
         self.crossover_rate = 0.75
         self.springs = springs
     
-    def initialize_population(self):
-        b_uppers = [spring.constants["a"] for spring in self.springs]
-        k_upper = self.springs[0].constants["k"]*100
+
+    def det_crowd(self,next_pop,parents,children,population_pool,sim):
+        p1_f = eval_springs(parents[0])
+        p2_f = eval_springs(parents[1])
+        c1_f = eval_springs(children[0]) 
+        c2_f = eval_springs(children[1])
+        if self.distance([parents[0], children[0]]) + self.distance([parents[1], children[1]]) < self.distance([parents[0], children[1]]) + self.distance([parents[1], children[0]]):
+            if c2_f > p2_f:
+                mut = self.mutate_individual(children[1])
+                if eval_springs(mut) > c2_f:
+                    next_pop.add(tuple(mut))
+                else:
+                    next_pop.add(tuple(children[1])) 
+            else:
+                next_pop.add(tuple(parents[1]))
+            if c1_f > p1_f:
+                mut = self.mutate_individual(children[0])
+                if eval_springs(mut) > c1_f:
+                    next_pop.add(tuple(mut))
+                else:
+                    next_pop.add(tuple(children[0]))
+            else:
+                next_pop.add(tuple(parents[0]))
+        else:
+            if c2_f > p1_f:
+                mut = self.mutate_individual(children[1])
+                if eval_springs(mut) > c2_f:
+                    next_pop.add(tuple(mut))
+                else:
+                    next_pop.add(tuple(children[1])) 
+            else:
+                next_pop.add(tuple(parents[0]))
+            if c1_f > p2_f:
+                mut = self.mutate_individual(children[0])
+                if eval_springs(mut) > c1_f:
+                    next_pop.add(tuple(mut))
+                else:
+                    next_pop.add(tuple(children[0])) 
+            else:
+                next_pop.add(tuple(parents[1]))
+
+
+    def spawn_individual(self):
+        individual = []
         num_springs = len(self.springs)
+        for s in range(num_springs):
+                # random.random() *(upper - lower) + lower
+                b = 0.1#random.random() *(1 - 0) + 0
+                c = random.random() *(2*pi - 0) + 0
+                k = random.random() *(100000 - 0) + 0
+                #print([b,c,k])
+                individual.append((b,c,k))
+        return(individual)
+
+    def initialize_population(self):
         pool = []
         for i in range(self.population_size):
-            individual = []
-            for s in range(num_springs):
-                # random.random() *(upper - lower) + lower
-                b = random.random() *(b_uppers[s] - 0) + 0
-                c = random.random() *(2*pi - 0) + 0
-                k = random.random() *(k_upper - 100) + 100
-                individual.append([b,c,k])
-            pool.append(individual)
+            pool.append(self.spawn_individual())
         return(pool)
 
     def mutate_individual(self, individual):
+        
         if random.choices([True, False], weights=[self.mutation_rate, 1-self.mutation_rate], k=1)[0]:
-            
-            chosen_s_idx = secrets.choice(range(len(individual)))
-            newb = individual[chosen_s_idx][0]+random.random() *(individual[chosen_s_idx][0]*0.2 + individual[chosen_s_idx][0]*0.2) - individual[chosen_s_idx][0]*0.2
-            newc = individual[chosen_s_idx][1]+random.random() *(individual[chosen_s_idx][1]*0.2 + individual[chosen_s_idx][1]*0.2) - individual[chosen_s_idx][1]*0.2
-            newk = individual[chosen_s_idx][2]+random.random() *(individual[chosen_s_idx][2]*0.2 + individual[chosen_s_idx][2]*0.2) - individual[chosen_s_idx][2]*0.2
-            individual[chosen_s_idx] = [newb, newc, newk]
+            indiv = copy.deepcopy(individual)
+            chosen_s_idx = secrets.choice(range(len(indiv)))
+            newb = indiv[chosen_s_idx][0]+random.random() *(indiv[chosen_s_idx][0]*0.2 + indiv[chosen_s_idx][0]*0.2) - indiv[chosen_s_idx][0]*0.2
+            newc = indiv[chosen_s_idx][1]+random.random() *(indiv[chosen_s_idx][1]*0.2 + indiv[chosen_s_idx][1]*0.2) - indiv[chosen_s_idx][1]*0.2
+            newk = indiv[chosen_s_idx][2]+random.random() *(indiv[chosen_s_idx][2]*0.2 + indiv[chosen_s_idx][2]*0.2) - indiv[chosen_s_idx][2]*0.2
+            indiv[chosen_s_idx] = (newb, newc, newk)
+            return(indiv)
+        else:
+            return(individual)
     
     def breed(self, parents):
         n1 = secrets.choice(range(len(self.springs)))
@@ -295,6 +445,21 @@ class Evolution():
         child1 = parents[0][0:n1] + parents[1][n1:n2] + parents[0][n2:]
         child2 = parents[1][0:n1] + parents[0][n1:n2] + parents[1][n2:]
         return(child1, child2)
+
+    def ranked_selection(self, population_pool,p_c):
+        probabilities = np.array([((1-p_c)**((i+1)-1))*p_c for i in range(len(population_pool)-1)] + [(1-p_c)**(len(population_pool))])
+        probabilities /= probabilities.sum()
+        indices = list(range(len(population_pool)))
+        chosen_ones = [population_pool[c] for c in np.random.choice(indices,size=2, p=probabilities, replace=False)]
+        return(chosen_ones)
+
+    def distance(self, individuals):
+        b_tot = sum([abs(individuals[0][i][0] - individuals[1][i][0]) for i in range(len(individuals[0]))])
+        c_tot = sum([abs(individuals[0][i][1] - individuals[1][i][1])/(2*pi) for i in range(len(individuals[0]))])
+        k_tot = sum([abs(individuals[0][i][2] - individuals[1][i][2])/100000 for i in range(len(individuals[0]))])
+        return(sum([b_tot,c_tot,k_tot]))
+
+    
     
 
 
@@ -311,13 +476,31 @@ class Evolution():
 
 
 if __name__ == "__main__":
-    a = Simulation(dt=0.0002,T=5, w_masses=0.1, k_springs=10000)
-    springs = a.springs
-    b = Evolution(springs)
-    indiv = b.initialize_population()[0]
-    print(a.eval_springs(indiv))
-    b.mutate_individual(indiv)
-    print(a.eval_springs(indiv))
+    # a = Simulation(dt=0.0002,T=5, w_masses=0.1, k_springs=10000)
+    # springs = a.springs
+    # b = Evolution(springs,10)
+    # pop = b.initialize_population()
+    # print("1",b.distance([pop[0],pop[1]]))
+    # print("2",b.distance([pop[1],pop[0]]))
+    # print("3",b.distance([pop[0],pop[0]]))
+    # print("4",b.distance([pop[0],pop[2]]))
+    # print("5",b.distance([pop[0],pop[1]])+ b.distance([pop[1],pop[2]]))
+    # print(a.eval_springs(indiv))
+    # b.mutate_individual(indiv)
+    # print(a.eval_springs(indiv))
+    best_pal, best_fits = evolve_robot2(100)
+
+    with open('best_indiv.pkl', 'wb') as f:
+        pickle.dump(best_pal, f)
+
+    with open('all_fits.pkl', 'wb') as f:
+        pickle.dump(best_fits, f)
+
+
+    # print(best_pal, '\n')
+    # print("======","\n")
+    # print(best_fits)
+    
 
 
     

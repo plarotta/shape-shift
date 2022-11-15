@@ -1,3 +1,11 @@
 {
-    "austin.mode": "CPU time"
+    "austin.mode": "CPU time",
+    "files.associations": {
+        "iostream": "cpp",
+        "ostream": "cpp",
+        "filesystem": "cpp",
+        "random": "cpp",
+        "vector": "cpp",
+        "map": "cpp"
+    }
 }
