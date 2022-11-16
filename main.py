@@ -10,12 +10,12 @@ import pickle
 
 class Mass:
 
-    def __init__(self,mass, position=[], velocity=[], acceleration=[], f_ext=[]):
+    def __init__(self,mass, position=np.array([0,0,0]), velocity=np.array([0,0,0]), acceleration=np.array([0,0,0]), f_ext=np.array([0,0,0])):
         self.mass = mass #float in kg
         self.position = position #list in m [x,y,z]
         self.velocity = velocity #list in m/s [dx/dt, dy/dt, dz/dt]
         self.acceleration = acceleration #list in m/s^2 [d^2x/dt^2, d^2y/dt^2, d^2z/dt^2]
-        self.f_ext = f_ext #list of Ns [[x,y,z],[x,y,z]]
+        self.f_ext = f_ext #list of Ns [[x,y,z],[x,y,z]] # now just a np.array
 
 class Spring:
     
@@ -23,7 +23,7 @@ class Spring:
         
         
         self.mass_indices = idcs
-        self.constants = {"a": l,"b": 0.3, "c":0.4, "k": k}
+        self.constants = {"a": l,"b": 0, "c":0, "k": k}
         self.rest_length = l
         self.spring_constant = self.constants["k"]
     
@@ -36,15 +36,15 @@ class Simulation:
         self.spring_k = k_springs
         self.masses = self.initialize_masses()
         self.springs = self.initialize_springs()
-        self.mu_static = 0.87
-        self.mu_kinetic = 0.47
+        self.mu_static = 0.9
+        self.mu_kinetic = 0.7
     
     def initialize_masses(self):
         masses = []
         for x in [0,1]:
             for y in [0,1]:
                 for z in [0,1]:
-                    masses.append(Mass(self.mass_w, np.array([x,y,z]), np.array([0,0,0]), np.array([0,0,0]), []))
+                    masses.append(Mass(self.mass_w, position=np.array([x,y,z])))
         
         # for theta in np.arange(0,2*pi, pi/4):
         #     for z in [0,5]:
@@ -63,62 +63,70 @@ class Simulation:
         return(springs)
  
     def interact(self,t,floor=-4,breath=False):
+        # start = time.time()
         for s in self.springs:
             l = self.get_spring_l(s)
             l_vect = np.array( self.masses[s.mass_indices[1]].position -  self.masses[s.mass_indices[0]].position  )
             L0 = s.constants["a"] + s.constants["b"] * np.sin(5*t + s.constants["c"])
             f_k = s.spring_constant * (l - L0)
-            f_kx = f_k * l_vect[0]/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
-            f_ky = f_k * l_vect[1]/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
-            f_kz = f_k * l_vect[2]/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
-            self.masses[s.mass_indices[0]].f_ext.append( np.array([f_kx, f_ky, f_kz]) )
-            self.masses[s.mass_indices[1]].f_ext.append( np.array([-f_kx, -f_ky, -f_kz]) )
+            f_dir = f_k/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
+            f_kx = f_dir * l_vect[0]
+            f_ky = f_dir * l_vect[1]
+            f_kz = f_dir * l_vect[2]
+            self.masses[s.mass_indices[0]].f_ext = self.masses[s.mass_indices[0]].f_ext + np.array([f_kx, f_ky, f_kz])
+            self.masses[s.mass_indices[1]].f_ext = self.masses[s.mass_indices[1]].f_ext + np.array([-f_kx, -f_ky, -f_kz]) 
+        # print("spring calcs: ", time.time()-start)
+        # print("\n")
+        start = time.time()
+        for m in self.masses:   
+            m.f_ext = m.f_ext + np.array([0,-9.81,0]) #gravity
 
-        for m in self.masses:
-            
-            
-            m.f_ext.append(np.array([0,-9.81,0])) #gravity
-
-            f_netx=0
-            f_nety=0
-            f_netz=0
-
-            for f in m.f_ext:
-                f_netx+=f[0]
-                f_nety+=f[1]
-                f_netz+=f[2]
-
-            # f_netx = sum([force[0] for force in m.f_ext])
-            # f_nety = sum([force[1] for force in m.f_ext])
-            # f_netz = sum([force[2] for force in m.f_ext])
-
+            # if round(m.position[1],2) <= floor:
             if m.position[1] <= floor:
+                
+                f_netx=m.f_ext[0]
+                f_nety=m.f_ext[1]
+                f_netz=m.f_ext[2]
                 Fp = np.array([f_netx, 0, f_netz])
                 Fp_norm = np.linalg.norm(Fp)
                 Fn = np.array([0, f_nety, 0])
                 Fn_norm = np.linalg.norm(Fn)
-                if Fp_norm < Fn_norm * self.mu_static:
-                    f_netx += -f_netx
-                    f_netz += -f_netz
-                else:
-                    dirFn = self.mu_kinetic*Fn_norm*np.array([f_netx, 0, f_netz])/Fp_norm
-                    f_netx+=dirFn[0]
-                    f_netz+=dirFn[2]
-                    f_netx = sum([force[0] for force in m.f_ext])
-                    f_netz = sum([force[2] for force in m.f_ext])
+                if Fp_norm < Fn_norm * self.mu_static: #friction
+                    # pass
+                    #print("A",m.f_ext)
+                    m.f_ext = m.f_ext - np.array([f_netx,0,f_netz])
+                    #print("B",m.f_ext)
                     
-            m.f_ext = [np.array([f_netx, f_nety, f_netz])]
+
+                else:
+                    #print([f_netx,f_netz])
+                    dirFn = self.mu_kinetic*Fn_norm*np.array([f_netx, 0, f_netz])/Fp_norm #friction
+                    # print(dirFn)
+                    m.f_ext = m.f_ext - np.array([dirFn[0],0,dirFn[2]])
+
+                # if round(m.position[1],2) < floor: #ground reaction force
+                if m.position[1] < floor:
+                    # print("now")
+                    ry = 10000*(abs(round(m.position[1],3) - floor))
+                    m.f_ext = m.f_ext + np.array([0,ry,0])
+
+
             self.integrate(m,floor)
+        #print("mass calcs: ", time.time()-start)
 
     
     def integrate(self, mass,floor):
-        mass.acceleration = mass.f_ext[0]/mass.mass 
+        # mass.f_ext = mass.f_ext.round(2)
+        # mass.acceleration = (mass.f_ext/mass.mass).round(4)
+        mass.acceleration = mass.f_ext/0.1
+        # mass.velocity = (mass.velocity + mass.acceleration*self.increment).round(4)
         mass.velocity = mass.velocity + mass.acceleration*self.increment
-        if mass.position[1] >=floor and (mass.position[1] + 0.999*mass.velocity[1]*self.increment < floor):
-            mass.velocity[1] = -mass.velocity[1]*.9
-        mass.velocity = mass.velocity * 0.999
-        mass.position = mass.position + mass.velocity*self.increment
-        mass.f_ext = []
+        # mass.velocity = (mass.velocity * 0.9985).round(4)
+        mass.velocity = mass.velocity * 0.9985
+        # print(mass.velocity)
+        # mass.position = (mass.position + mass.velocity*self.increment).round(4)
+        mass.position = mass.position + mass.velocity*0.0002
+        mass.f_ext = np.array([0,0,0])
 
 
     def plot_energies(self, es):
@@ -142,12 +150,12 @@ class Simulation:
        
 
     def get_spring_l(self, spring):
-        m1_idx1 = spring.mass_indices[0]
-        m2_idx2 = spring.mass_indices[1]
-        m1_p = self.masses[m1_idx1].position
-        m2_p = self.masses[m2_idx2].position
-        length = np.linalg.norm(m2_p-m1_p)
-        return(length)
+        # m1_idx1 = spring.mass_indices[0]
+        # m2_idx2 = spring.mass_indices[1]
+        # m1_p = self.masses[spring.mass_indices[0]].position
+        # m2_p = self.masses[spring.mass_indices[1]].position
+        # length = np.linalg.norm(m2_p-m1_p)
+        return(np.linalg.norm(self.masses[spring.mass_indices[1]].position-self.masses[spring.mass_indices[0]].position))
             
     def initialize_scene(self,z, breath=False):
         # walls
@@ -184,9 +192,9 @@ class Simulation:
         COM.pos = vector(COM_pos[0],COM_pos[1],COM_pos[2])
 
     def run_simulation(self,plot_energies=False):
-        self.masses[0].f_ext.append(np.array([3000,60000,4000]))
+        # self.masses[0].f_ext = self.masses[0].f_ext +np.array([30000,0,4000])
         m_obs, s_obs, COM = self.initialize_scene(z=-0.06)
-        time.sleep(10)
+        time.sleep(3)
         
         times = np.arange(0,self.final_T, 0.02)
         if plot_energies:
@@ -199,6 +207,8 @@ class Simulation:
             self.interact(t,floor=0)
             if t in times:
                 rate(50)
+                print("\n")
+                print(t,"s")
                 self.update_scene(m_obs, s_obs, COM)
         if plot_energies:
             self.plot_energies(energies)
@@ -210,31 +220,26 @@ class Simulation:
         COMz = sum([m.mass*m.position[2] for m in self.masses])/M
         return(np.array([COMx, COMy, COMz]))
 
-def eval_springs(springs, render = False):
+def eval_springs(springs, render = False,T=2):
     start = time.time()
-    sim = Simulation(dt=0.0002,T=4, w_masses=0.1, k_springs=10000)
+    sim = Simulation(dt=0.0002,T=T, w_masses=0.1, k_springs=10000)
 
     print("call to eval")
     for idx in range(len(sim.springs)):
         sim.springs[idx].constants["b"] = springs[idx][0]
         sim.springs[idx].constants["c"] = springs[idx][1]
         sim.springs[idx].constants["k"] = springs[idx][2]
+        sim.springs[idx].spring_constant = springs[idx][2]
+
     if render:
         sim.run_simulation()
     else:
         p1 = sim.get_COM()
         for t in np.arange(0, sim.final_T, sim.increment):
-            sim.interact(t,floor=-4)
+            sim.interact(t,floor=0)
         p2 = sim.get_COM()
         print("eval time: ", time.time()-start)
         return(np.linalg.norm(np.array([p2[0],0,p2[2]])-np.array([p1[0],0,p1[2]])))
-
-
-
-
-
-
-
 
 
 def evolve_robot(n_gen):
@@ -271,19 +276,19 @@ def evolve_robot(n_gen):
     -child2: complement of child2
     
     '''
-    sim = Simulation(dt=0.0002,T=3, w_masses=0.1, k_springs=10000)
+    sim = Simulation(dt=0.0002,T=1.5, w_masses=0.1, k_springs=10000)
     springs = sim.springs
     evolve = Evolution(springs=springs, ngen=n_gen)
     population_pool = evolve.initialize_population()
     
-    
+    # eval_springs(population_pool[0],True)
+    # raise ValueError
     fits = [eval_springs(i) for i in population_pool]
     population_pool = [population_pool[i] for i in np.argsort(fits)]
     population_pool = list(reversed(population_pool))
     next_gen = []
     best_fits = []
-    # eval_springs(population_pool[0],True)
-    # raise ValueError
+    
 
 
     for i in range(evolve.generations):
@@ -329,7 +334,7 @@ def evolve_robot2(n_gen):
         # store the value of the best fitness of the generation
     
     #return the best individual of the latest generation
-    sim = Simulation(dt=0.0002,T=3, w_masses=0.1, k_springs=10000)
+    sim = Simulation(dt=0.0002,T=1.5, w_masses=0.1, k_springs=10000)
     springs = sim.springs
     evolve = Evolution(springs=springs, ngen=n_gen)
     population_pool = evolve.initialize_population()
@@ -371,10 +376,11 @@ def evolve_robot2(n_gen):
 class Evolution():
     def __init__(self, springs, ngen):
         self.generations = ngen
-        self.population_size = 5
-        self.mutation_rate = 0.2
-        self.crossover_rate = 0.75
+        self.population_size = 30
+        self.mutation_rate = 0.8
+        self.crossover_rate = 1
         self.springs = springs
+        self.material_dict = {1:(0,0,1000),2:(0,0,20000),3:(0.25,0,5000),4:(0.25,pi,5000)}
     
 
     def det_crowd(self,next_pop,parents,children,population_pool,sim):
@@ -422,11 +428,14 @@ class Evolution():
         individual = []
         num_springs = len(self.springs)
         for s in range(num_springs):
-                # random.random() *(upper - lower) + lower generates a random rational number in the range (lower,upper)
-                b = random.random() *(1 - 0) + 0
-                c = random.random() *(2*pi - 0) + 0
-                k = random.random() *(100000 - 0) + 0
-                individual.append((b,c,k))
+                # 4 materials
+                material = secrets.choice([1,2,3,4])
+                # b = random.random() *(1 - 0) + 0
+                # c = random.random() *(2*pi - 0) + 0
+                # k = random.random() *(100000 - 0) + 0
+                # individual.append((b,c,k))
+
+                individual.append(self.material_dict[material])
         return(individual)
 
     def initialize_population(self):
@@ -472,7 +481,7 @@ class Evolution():
         return(sum([b_tot,c_tot,k_tot]))
 
     
-    
+
 
 
             
@@ -488,8 +497,8 @@ class Evolution():
 
 
 if __name__ == "__main__":
-    a = Simulation(dt=0.0002,T=5, w_masses=0.1, k_springs=10000)
-    a.run_simulation()
+    # a = Simulation(dt=0.0002,T=10, w_masses=0.1, k_springs=5000)
+    # a.run_simulation()
     # springs = a.springs
     # b = Evolution(springs,10)
     # pop = b.initialize_population()
@@ -501,14 +510,22 @@ if __name__ == "__main__":
     # print(a.eval_springs(indiv))
     # b.mutate_individual(indiv)
     # print(a.eval_springs(indiv))
-    # best_pal, best_fits = evolve_robot2(5)
+    best_pal, best_fits = evolve_robot2(50)
 
-    # with open('best_indiv.pkl', 'wb') as f:
-    #     pickle.dump(best_pal, f)
+    with open('best_indiv4.pkl', 'wb') as f:
+        pickle.dump(best_pal, f)
 
-    # with open('all_fits.pkl', 'wb') as f:
-    #     pickle.dump(best_fits, f)
+    with open('all_fits4.pkl', 'wb') as f:
+        pickle.dump(best_fits, f)
 
+
+    # with open('best_indiv3.pkl', 'rb') as f:
+    #     params = pickle.load(f)
+    # with open('all_fits3.pkl', 'rb') as f:
+    #     fits = pickle.load(f)
+    # print(fits)
+
+    # eval_springs(params,render=True,T=10)
 
     # print(best_pal, '\n')
     # print("======","\n")
