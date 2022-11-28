@@ -7,6 +7,9 @@ import secrets
 import random
 import copy
 import pickle
+import cProfile
+import re
+import numba as nb
 
 class Mass:
 
@@ -66,11 +69,9 @@ class Simulation:
             L0 = s.constants["a"] + s.constants["b"] * np.sin(5*t + s.constants["c"])
             f_k = s.spring_constant * (l - L0)
             f_dir = f_k/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
-            f_kx = f_dir * l_vect[0]
-            f_ky = f_dir * l_vect[1]
-            f_kz = f_dir * l_vect[2]
-            self.masses[s.mass_indices[0]].f_ext = self.masses[s.mass_indices[0]].f_ext + np.array([f_kx, f_ky, f_kz])
-            self.masses[s.mass_indices[1]].f_ext = self.masses[s.mass_indices[1]].f_ext + np.array([-f_kx, -f_ky, -f_kz]) 
+            f_full = f_dir * l_vect
+            self.masses[s.mass_indices[0]].f_ext = self.masses[s.mass_indices[0]].f_ext + f_full
+            self.masses[s.mass_indices[1]].f_ext = self.masses[s.mass_indices[1]].f_ext - f_full
         start = time.time()
         for m in self.masses:   
             m.f_ext = m.f_ext + np.array([0,-9.81,0]) #gravity
@@ -80,8 +81,10 @@ class Simulation:
                 f_netx=m.f_ext[0]
                 f_nety=m.f_ext[1]
                 f_netz=m.f_ext[2]
+                
                 Fp = np.array([f_netx, 0, f_netz])
-                Fp_norm = np.linalg.norm(Fp)
+                # Fp_norm = np.linalg.norm(Fp)
+                Fp_norm = np.sqrt(f_netx**2 + f_netz**2)
                 Fn = np.array([0, f_nety, 0])
                 Fn_norm = np.linalg.norm(Fn)
                 if Fp_norm < Fn_norm * self.mu_static: #friction
@@ -99,10 +102,10 @@ class Simulation:
 
             self.integrate(m,floor)
 
-    
+    # @nb.njit(fastmath=True)
     def integrate(self, mass,floor):
         mass.acceleration = mass.f_ext/0.1
-        mass.velocity = mass.velocity + mass.acceleration*self.increment
+        mass.velocity = mass.velocity + mass.acceleration*0.0002
         mass.velocity = mass.velocity * 0.9985
         mass.position = mass.position + mass.velocity*0.0002
         mass.f_ext = np.array([0,0,0])
@@ -172,7 +175,7 @@ class Simulation:
 
     def run_simulation(self,plot_energies=False):
         # self.masses[0].f_ext = self.masses[0].f_ext +np.array([30000,0,4000])
-        m_obs, s_obs, COM = self.initialize_scene(z=-0.06)
+        m_obs, s_obs, COM = self.initialize_scene(z=-4.06)
         time.sleep(6)
         
         times = np.arange(0,self.final_T, 0.02)
@@ -183,7 +186,7 @@ class Simulation:
                 spre, mase = self.calc_energy()
                 energies["springs"].append(spre)
                 energies["masses"].append(mase)
-            self.interact(t,floor=0)
+            self.interact(t,floor=-4)
             if t in times:
                 rate(50)
                 print("\n")
@@ -322,6 +325,7 @@ def evolve_robot2(n_gen):
     
     fits = [eval_springs(i) for i in population_pool]
     print("succeeded first set of evals")
+    return(True)
     
     population_pool = [population_pool[i] for i in np.argsort(fits)]
     population_pool = list(reversed(population_pool))
@@ -355,7 +359,7 @@ def evolve_robot2(n_gen):
 class Evolution():
     def __init__(self, springs, ngen):
         self.generations = ngen
-        self.population_size = 30
+        self.population_size = 5
         self.mutation_rate = 0.8
         self.crossover_rate = 1
         self.springs = springs
@@ -462,8 +466,10 @@ class Evolution():
 
 
 if __name__ == "__main__":
+    # sim = Simulation(0.0002,4,0.1,5000)
+    # sim.run_simulation()
+    cProfile.run('evolve_robot2(1)')
 
-    # best_pal, best_fits = evolve_robot2(50)
 
     # with open('best_indiv4.pkl', 'wb') as f:
     #     pickle.dump(best_pal, f)
@@ -472,18 +478,18 @@ if __name__ == "__main__":
     #     pickle.dump(best_fits, f)
 
 
-    with open('all_fits6-tr.pkl', 'rb') as f:
-        params = pickle.load(f)
-    with open('best_indiv6-tr.pkl', 'rb') as f:
-        fits = pickle.load(f)
+    # with open('all_fits6-tr.pkl', 'rb') as f:
+    #     params = pickle.load(f)
+    # with open('best_indiv6-tr.pkl', 'rb') as f:
+    #     fits = pickle.load(f)
     
-    eval_springs(params,render=True,T=10)
-    plt.plot(range(len(fits)),fits)
+    # eval_springs(params,render=True,T=10)
+    # plt.plot(range(len(fits)),fits)
     
-    plt.xlabel("generation #")
-    plt.ylabel("COM displacement (m)")
-    plt.title("Learning curve for cube robot evolution")
-    plt.show()
+    # plt.xlabel("generation #")
+    # plt.ylabel("COM displacement (m)")
+    # plt.title("Learning curve for cube robot evolution")
+    # plt.show()
 
 
     
