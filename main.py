@@ -7,8 +7,8 @@ import secrets
 import random
 import copy
 import pickle
-from numba import njit
-import cProfile
+from numba import njit, vectorize, jit
+import cProfile, pstats
 import re
 
     
@@ -30,15 +30,13 @@ import re
 
 # @njit()
 def initialize_masses():
-    first = True
+    masses = np.zeros(96).reshape(8,4,3)
+    n = 0
     for x in [0,1]:
         for y in [0,1]:
             for z in [0,1]:
-                if first == True:
-                    masses = np.array([[[x,y,z],[0.0,0.0,0.0],[0.0,0.0,0.0],[0.0,0.0,0.0]]])
-                    first = False
-                else:
-                    masses = np.concatenate((masses, np.array([[[x,y,z],[0.0,0.0,0.0],[0.0,0.0,0.0],[0.0,0.0,0.0]]])))
+                masses[n][0] = np.array([float(x),float(y),float(z)])
+                n+=1
     return(masses)
 
 # @njit()
@@ -56,37 +54,36 @@ def initialize_springs(masses):
             else:
                 springs = np.concatenate((springs, np.array([[[mass_idx1, mass_idx2, 0, 0],[length, 0,0,5000]]])))
     return(springs)
-
+    
+@njit()
 def interact(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4,breath=False):
+    # start = time.time()
     for s in springs:
         l = get_spring_l(masses,s)
-        l_vect = np.array( masses[int(s[0][1])][0] -  masses[int(s[0][0])][0]  )
+        l_vect = masses[int(s[0][1])][0] - masses[int(s[0][0])][0]  
+        # print(l_vect)
+        # raise ValueError
         L0 = s[1][0] + s[1][1] * np.sin(5*t + s[1][2])
         f_k = s[1][3] * (l - L0)
         f_dir = f_k/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
-        f_kx = f_dir * l_vect[0]
-        f_ky = f_dir * l_vect[1]
-        f_kz = f_dir * l_vect[2]
-        masses[int(s[0][0])][3] = masses[int(s[0][0])][3] + np.array([f_kx, f_ky, f_kz])
-        masses[int(s[0][1])][3] = masses[int(s[0][1])][3] + np.array([-f_kx, -f_ky, -f_kz]) 
-    start = time.time()
+        f_full = f_dir * l_vect
+        masses[int(s[0][0])][3] = masses[int(s[0][0])][3] + f_full
+        masses[int(s[0][1])][3] = masses[int(s[0][1])][3] - f_full
     for m in masses:   
         m[3] = m[3] + np.array([0,-9.81,0]) #gravity
         if m[0][1] <= floor:
             
-            f_netx=m[3][0]
-            f_nety=m[3][1]
-            f_netz=m[3][2]
-            Fp = np.array([f_netx, 0.0, f_netz])
-            Fp_norm = np.linalg.norm(Fp)
-            Fn = np.array([0.0, f_nety, 0.0])
-            Fn_norm = np.linalg.norm(Fn)
+            f_net = m[3]
+            Fp = np.array([f_net[0], 0.0, f_net[2]])
+            Fp_norm = np.sqrt(Fp[0]**2 + Fp[2]**2)
+            Fn = np.array([0.0, f_net[1], 0.0])
+            Fn_norm = f_net[1]
             if Fp_norm < Fn_norm * mu_static: #friction
-                m[3] = m[3] - np.array([f_netx,0.0,f_netz])
+                m[3] = m[3] - np.array([f_net[0],0.0,f_net[2]])
                 
 
             else:
-                dirFn = mu_kinetic*Fn_norm*np.array([f_netx, 0.0, f_netz])/Fp_norm #friction
+                dirFn = mu_kinetic*Fn_norm*np.array([f_net[0], 0.0, f_net[2]])/Fp_norm #friction
                 m[3] = m[3] - np.array([dirFn[0],0.0,dirFn[2]])
 
             if m[0][1] < floor:
@@ -94,7 +91,8 @@ def interact(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4,breath=Fal
                 m[3] = m[3] + np.array([0,ry,0])
         integrate(m,increment)
 
-# @njit()
+
+@njit()
 def integrate(mass,increment):
     mass[2] = mass[3]/0.1
     mass[1] = mass[1] + mass[2]*increment
@@ -103,13 +101,14 @@ def integrate(mass,increment):
     mass[3] = np.array([0.0,0.0,0.0])
 
     
-
+@njit()
 def get_spring_l(masses, spring):
     m1_idx1 = spring[0][0]
     m2_idx2 = spring[0][1]
     m1_p = masses[int(m1_idx1)][0]
     m2_p = masses[int(m2_idx2)][0]
-    return(np.linalg.norm(m2_p-m1_p))
+    diff = m2_p-m1_p
+    return(np.sqrt(diff[0]**2 + diff[1]**2 + diff[2]**2))
         
 def initialize_scene(masses,springs,z, breath=False):
     # walls
@@ -173,7 +172,7 @@ def get_COM(masses):
     COMz = sum([0.1*m[0][2] for m in masses])/M
     return(np.array([COMx, COMy, COMz]))
 
-def eval_springs(springs_in,final_T=2,increment=0.0002, render = False):
+def eval_springs(springs_in,final_T=10,increment=0.0002, render = False):
     start = time.time()
     masses = initialize_masses()
     springs = initialize_springs(masses)
@@ -448,7 +447,7 @@ def distance(individuals):
 
 
 if __name__ == "__main__":
-    # run_simulation(5,0.0002,0.9,0.7,-4)
+    # run_simulation(10,0.0002,0.9,0.7,-4)
     # masses = initialize_masses()
     # print("Masses: ", masses)
     # print("Springs: ", initialize_springs(masses))
@@ -467,9 +466,9 @@ if __name__ == "__main__":
     # print(a.eval_springs(indiv))
     # b.mutate_individual(indiv)
     # print(a.eval_springs(indiv))
-    cProfile.run('evolve_robot2(1)')
+    # cProfile.run('evolve_robot2(1)',filename = "first_profile")
 
-    # best_pal, best_fits = evolve_robot2(5)
+    evolve_robot2(1)
 
 
     # with open('best_indiv.pkl', 'wb') as f:
@@ -484,6 +483,13 @@ if __name__ == "__main__":
     # print(best_fits)
     
 
+    # profiler = cProfile.Profile()
+    # profiler.enable()
+    # evolve_robot2(1)
+    # profiler.disable()
+    # stats = pstats.Stats(profiler).sort_stats('tottime')
+    # stats.dump_stats('export-data')
+    # stats.print_stats()
 
     
 
