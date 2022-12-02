@@ -63,13 +63,16 @@ def interact_fast(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4,breat
     # start = time.time()
     for s in springs:
         l = get_spring_l(masses,s)
+        # print( masses[int(s[0][0])][0])
         l_vect = masses[int(s[0][1])][0] - masses[int(s[0][0])][0]  
         # print(l_vect)
         # raise ValueError
-        L0 = s[1][0] + s[1][1] * np.sin(2*t + s[1][2])
+        L0 = s[1][0] + s[1][1] * np.sin(4*t + s[1][2])
         f_k = s[1][3] * (l - L0)
         # print(l_vect)
         f_dir = f_k/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
+        # print(l_vect)
+        # print(f_dir)
         f_full = f_dir * l_vect
         masses[int(s[0][0])][3] = masses[int(s[0][0])][3] + f_full
         masses[int(s[0][1])][3] = masses[int(s[0][1])][3] - f_full
@@ -78,11 +81,12 @@ def interact_fast(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4,breat
         if m[0][1] <= floor:
             
             f_net = m[3]
+            # print("m[3]: ", f_net)
             Fp = np.array([f_net[0], 0.0, f_net[2]])
             Fp_norm = np.sqrt(Fp[0]**2 + Fp[2]**2)
             Fn = np.array([0.0, f_net[1], 0.0])
             Fn_norm = f_net[1]
-            if Fp_norm < Fn_norm * mu_static: #friction
+            if Fp_norm < abs(Fn_norm * mu_static): #friction
                 m[3] = m[3] - np.array([f_net[0],0.0,f_net[2]])                
 
             else:
@@ -213,16 +217,20 @@ def run_simulation(masses, springs,final_T,increment, mu_static, mu_kinetic,floo
 # @njit()
 def get_COM(masses):
     M = sum([0.1 for m in masses])
+    # print("M: ",M)
     masses[:,0,0]
     COMx = np.sum(masses[:,0,0]*0.1)/M
     COMy = np.sum(masses[:,0,1]*0.1)/M
     COMz = np.sum(masses[:,0,2]*0.1)/M
+    # print("COM: ",np.array([COMx, COMy, COMz]))
     return(np.array([COMx, COMy, COMz]))
 
 def eval_springs(masses,springs,spring_constants,final_T=3,increment=0.0002, render = False):
     start = time.time()
     print("call to eval")
+    # print(spring_constants)
     for idx in range(len(springs)):
+        # print(spring_constants[idx])
         springs[idx][1][1] = spring_constants[idx][0]
         springs[idx][1][2] = spring_constants[idx][1]
         springs[idx][1][3] = spring_constants[idx][2]
@@ -233,12 +241,18 @@ def eval_springs(masses,springs,spring_constants,final_T=3,increment=0.0002, ren
         for t in np.arange(0, final_T, increment):
             try:
                 interact_fast(springs,masses,t,increment,0.9,0.8,floor=0)
+                # input("continue?\n")
+
             except ZeroDivisionError:
                 interact(springs,masses,t,increment,0.9,0.8,floor=0)
                 raise ValueError
         p2 = get_COM(masses)
         print("eval time: ", time.time()-start)
         rehome(masses) #reset current state of the masses
+        # print("p1: ", np.array([p1[0],0,p1[2]]))
+        # print("p2: ",np.array([p2[0],0,p2[2]]))
+        # print(np.linalg.norm(np.array([p2[0],0,p2[2]])-np.array([p1[0],0,p1[2]])))
+        # input("continue?\n")
         return(np.linalg.norm(np.array([p2[0],0,p2[2]])-np.array([p1[0],0,p1[2]])))
 
 def rehome(masses):
@@ -290,45 +304,80 @@ def evolve_robot(n_gen):
     -child2: complement of child2
     
     '''
-    pop_size = 8
-    mut_rate = 0.8
+    pop_size = 30
+    mut_rate = .7
     masses = initialize_masses()
     springs = initialize_springs(masses)
     population_pool = initialize_population(pop_size,springs)
-
-    ##------- important code, pls keep
-    fits = [eval_springs(masses,springs,i) for i in population_pool]
-    population_pool = [population_pool[i] for i in np.argsort(fits)]
-    population_pool = list(reversed(population_pool))
-    # ##--------
+   
+    
 
 
     pool_springs = []
     for idx in range(len(population_pool)):
         pool_springs.append(springs)
-    # print(pool_springs)
-    # pool_masses = np.zeros(len(population_pool) * len(masses) * 5 * 3).reshape(len(population_pool), len(masses),5,3)
     pool_masses = []
     for idx in range(len(population_pool)):
-        # print(masses)
         pool_masses.append(masses)   
+
+    for idx in range(len(population_pool)):
+        # print("ngen: ", len(next_gen))
+        m,s,c = mutate_morphology(pool_masses[idx], pool_springs[idx], population_pool[idx])
+        pool_masses[idx] = m
+        pool_springs[idx] = s
+        population_pool[idx] = c
     
+    fits = [eval_springs(pool_masses[i],pool_springs[i],population_pool[i]) for i in range(len(population_pool))]
+    arginds = np.argsort(fits)
+    population_pool = [population_pool[i] for i in arginds]
+    population_pool = list(reversed(population_pool))
+    pool_masses = [pool_masses[i] for i in arginds]
+    pool_masses = list(reversed(pool_masses))
+    pool_springs = [pool_springs[i] for i in arginds]
+    pool_springs = list(reversed(pool_springs))
+
+    
+
+     ##------- important code, pls keep
+    # fits = [eval_springs(masses,springs,i) for i in population_pool]
+    # population_pool = [population_pool[i] for i in np.argsort(fits)]
+    # population_pool = list(reversed(population_pool))
+    ##--------
+    # population_pool = population_pool[:int(len(population_pool)/2)]
+    # pool_springs = pool_springs[:int(len(pool_springs)/2)]
+    # pool_masses = pool_masses[:int(len(pool_masses)/2)]
+    # ##--------
+
     next_gen = []
     next_masses = []
     next_springs = []
     best_fits = []
     n = 0
 
+    # for idx in range(int(len(population_pool)/2),len(population_pool)):
+    #     # print("ngen: ", len(next_gen))
+    #     m,s,c = mutate_morphology(pool_masses[idx], pool_springs[idx], population_pool[idx])
+    #     pool_masses[idx] = m
+    #     pool_springs[idx] = s
+    #     population_pool[idx] = c
+
 
     for i in range(n_gen):
         print("Began generation ", i, "...")
         n+=1
-        population_pool = population_pool[:int(len(population_pool)/2)]
-        pool_springs = pool_springs[:int(len(pool_springs)/2)]
-        pool_masses = pool_masses[:int(len(pool_masses)/2)]
+        # population_pool = population_pool[:int(len(population_pool)/2)]
+        # pool_springs = pool_springs[:int(len(pool_springs)/2)]
+        # pool_masses = pool_masses[:int(len(pool_masses)/2)]
+        # if n%5 == 0:
+        #     for idx in range(int(len(population_pool)/2),len(population_pool)):
+        #         # print("ngen: ", len(next_gen))
+        #         m,s,c = mutate_morphology(pool_masses[idx], pool_springs[idx], population_pool[idx])
+        #         pool_masses[idx] = m
+        #         pool_springs[idx] = s
+        #         population_pool[idx] = c
         while len(next_gen) < pop_size:
             # print("A")
-            parents,parent_indices = ranked_selection(population_pool, 0.2) #need to save the parent indices
+            parents,parent_indices = ranked_selection(population_pool, 0.15) #need to save the parent indices
             children = breed(parents) #children should both take the springs and masses of the smaller parent
             children = [mutate_individual(mut_rate,c) for c in children]
             [next_gen.append(p) for p in parents]
@@ -348,18 +397,13 @@ def evolve_robot(n_gen):
             else:
                 [next_masses.append(pool_masses[parent_indices[0]]) for i in range(2)]
                 [next_springs.append(pool_springs[parent_indices[0]]) for i in range(2)]
-        if n%2 == 0:
-            for idx in range(len(next_gen)):
-                # print("ngen: ", len(next_gen))
-                m,s,c = mutate_morphology(next_masses[idx], next_springs[idx], next_gen[idx])
-                next_masses[idx] = m
-                next_springs[idx] = s
-                next_gen[idx] = c
+
 
         print("Done making next generation.")
         population_pool = [np.copy(i) for i in next_gen]
         pool_masses = [np.copy(j) for j in next_masses]
         pool_springs = [np.copy(k) for k in next_springs]
+        
         fits = [eval_springs(pool_masses[i],pool_springs[i],population_pool[i]) for i in range(len(population_pool))]
         arginds = np.argsort(fits)
         population_pool = [population_pool[i] for i in arginds] #gotta also reorder the springs and masses
@@ -374,10 +418,18 @@ def evolve_robot(n_gen):
         next_gen = []
         next_springs = []
         next_masses = []
+        # if n%3 == 0:
+        for idx in range(int(len(population_pool)/2),len(population_pool)):
+            # print("ngen: ", len(next_gen))
+            m,s,c = mutate_morphology(pool_masses[idx], pool_springs[idx], population_pool[idx])
+            pool_masses[idx] = m
+            pool_springs[idx] = s
+            population_pool[idx] = c
+        
     input("Render best solution?")
     eval_springs(pool_masses[0], pool_springs[0],population_pool[0], render=True) 
     
-    return(best_fits, population_pool[0])
+    return(best_fits, population_pool[0],pool_masses[0],pool_springs[0])
     
 
 
@@ -439,19 +491,19 @@ def fatten_cube(masses,springs,spring_constants):
     invalid_point = True
     while invalid_point:
         chosen_masses = np.array(random.choices(masses,k=3))
-        print(chosen_masses)
+        # print(chosen_masses)
         # print(chosen_masses)
         ch_m_pos = chosen_masses[:,0,:] 
         v1 = ch_m_pos[0]-ch_m_pos[1]
         v2 = ch_m_pos[2]-ch_m_pos[1]
         normal_vect = np.cross(v1,v2)
-        range_x = np.array([np.mean(ch_m_pos[:,0])-random.random(), np.mean(ch_m_pos[:,0])*1.5+random.random()])
-        print("xrange: ",range_x)
+        range_x = np.array([np.mean(ch_m_pos[:,0])-random.random(), np.mean(ch_m_pos[:,0])*1.8+random.random()])
+        # print("xrange: ",range_x)
         
-        range_y = np.array([np.mean(ch_m_pos[:,1])-random.random(), np.mean(ch_m_pos[:,1])*1.5+random.random()])
-        range_z = np.array([np.mean(ch_m_pos[:,2])-random.random(), np.mean(ch_m_pos[:,2])*1.5+random.random()])
-        print("yrange: ",range_y)
-        print("zrange: ", range_z)
+        range_y = np.array([np.mean(ch_m_pos[:,1])-random.random(), np.mean(ch_m_pos[:,1])*1.8+random.random()])
+        range_z = np.array([np.mean(ch_m_pos[:,2])-random.random(), np.mean(ch_m_pos[:,2])*1.8+random.random()])
+        # print("yrange: ",range_y)
+        # print("zrange: ", range_z)
         point = np.array([ random.random() *(range_x[1] - range_x[0]) + range_x[0] , random.random() *(range_y[1] - range_y[0]) + range_y[0] , random.random() *(range_z[1] - range_z[0]) + range_z[0] ])
         if point[1] < 0:
             continue
@@ -459,7 +511,7 @@ def fatten_cube(masses,springs,spring_constants):
         if point[1] < 0:
             continue
         invalid_point = False
-        print(point)
+        # print(point)
         masses2,springs2,spring_constants2 = append_point(point,masses,springs,spring_constants)
         
     return(masses2,springs2,spring_constants2)
@@ -475,8 +527,9 @@ def slim_cube(masses,springs,spring_constants):
     return(masses2,springs2,spring_constants2)
 
 def mutate_morphology(masses,springs,spring_constants):
-    operation = np.random.choice(["Fatten", "Slim"],p=[0.65,0.35])
-    if len(masses) <3 or operation == "Fatten":
+    operation = np.random.choice(["Fatten", "Slim"],p=[0.75,0.25])
+    # print(len(masses))
+    if len(masses) < 10 or operation == "Fatten":
         masses2,springs2,spring_constants2 = fatten_cube(masses,springs,spring_constants)
     # print(operation)
     # operation = "Fatten"
@@ -602,22 +655,31 @@ def spawn_individual(springs):
     individual = []
     num_springs = len(springs)
     individual = np.zeros(3*num_springs).reshape(num_springs,3)
+    # material_dict = {1:np.array([0.0,0.0,1000.0]),2:np.array([0.0,0.0,20000.0]),3:np.array([0.25,0.0,5000.0]),4:np.array([0.25,np.pi,5000.0])}
     for s in range(num_springs):
             # random.random() *(upper - lower) + lower generates a random rational number in the range (lower,upper)
             b = random.random() *(1 - 0) + 0
             c = random.random() *(2*pi - 0) + 0
-            k = random.random() *(100000 - 0) + 0
-            # individual.append((b,c,k))
+            k = random.random() *(10000 - 0) + 0
+            # k = 1000.0
+            # material = secrets.choice([1,2,3,4])
+            # print(np.array([b,c,k]))
+            # input("continue?\n")
+            # individual[s] = np.copy(material_dict[material])
             individual[s] = np.array([b,c,k])
     return(individual)
 
 def spawn_spring():
     # random.random() *(upper - lower) + lower generates a random rational number in the range (lower,upper)
+    # material_dict = {1:np.array([0.0,0.0,1000.0]),2:np.array([0.0,0.0,20000.0]),3:np.array([0.25,0.0,5000.0]),4:np.array([0.25,np.pi,5000.0])}
     b = random.random() *(1 - 0) + 0
     c = random.random() *(2*pi - 0) + 0
-    k = random.random() *(100000 - 0) + 0
-    # individual.append((b,c,k))
+    k = random.random() *(10000 - 0) + 0
+    # k = 1000.0
+    # material = secrets.choice([1,2,3,4])
+    
     individual = np.array([b,c,k])
+    # return(np.copy(material_dict[material]))
     return(individual)
 
 def initialize_population(population_size,springs):
@@ -664,9 +726,22 @@ def distance(individuals):
 
 if __name__ == "__main__":
     # run_simulation(10,0.0001,0.9,0.7,-2,debug_mode=True)
- 
+    
 
-    # evolve_robot(30)
+    best_fits,population_pool,pool_masses,pool_springs = evolve_robot(100)
+
+    with open('best_fits3.pkl', 'wb') as f:
+        pickle.dump(best_fits, f)
+
+    with open('population_pool3.pkl', 'wb') as f:
+        pickle.dump(population_pool, f)
+    with open('pool_masses3.pkl', 'wb') as f:
+        pickle.dump(pool_masses, f)
+
+    with open('pool_springs3.pkl', 'wb') as f:
+        pickle.dump(pool_springs, f)
+
+
     # masses = initialize_masses()
     # springs = initialize_springs(masses)
     # # # print(springs)
@@ -703,9 +778,3 @@ if __name__ == "__main__":
     # stats = pstats.Stats(profiler).sort_stats('tottime')
     # stats.dump_stats('export-data')
     # stats.print_stats()
-
-    
-
-
-
-
