@@ -1,4 +1,15 @@
-
+import time
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from vpython import *
+import secrets
+import random
+import copy
+import pickle
+from numba import njit, vectorize, jit
+import cProfile, pstats
+import re
 
 
 
@@ -194,3 +205,46 @@ def distance(individuals):
     c_tot = sum([abs(individuals[0][i][1] - individuals[1][i][1])/(2*pi) for i in range(len(individuals[0]))])
     k_tot = sum([abs(individuals[0][i][2] - individuals[1][i][2])/100000 for i in range(len(individuals[0]))])
     return(sum([b_tot,c_tot,k_tot]))
+
+def spawn_individual(springs):
+    individual = []
+    num_springs = len(springs)
+    individual = np.zeros(3*num_springs).reshape(num_springs,3)
+    # material_dict = {1:np.array([0.0,0.0,1000.0]),2:np.array([0.0,0.0,20000.0]),3:np.array([0.25,0.0,5000.0]),4:np.array([0.25,np.pi,5000.0])}
+    for s in range(num_springs):
+            # random.random() *(upper - lower) + lower generates a random rational number in the range (lower,upper)
+            b = random.random() *(1 - 0) + 0
+            c = random.random() *(2*np.pi - 0) + 0
+            k = random.random() *(10000 - 0) + 0
+            # k = 1000.0
+            # material = secrets.choice([1,2,3,4])
+            # print(np.array([b,c,k]))
+            # input("continue?\n")
+            # individual[s] = np.copy(material_dict[material])
+            individual[s] = np.array([b,c,k])
+    return(individual)
+
+def spawn_spring():
+    # random.random() *(upper - lower) + lower generates a random rational number in the range (lower,upper)
+    # material_dict = {1:np.array([0.0,0.0,1000.0]),2:np.array([0.0,0.0,20000.0]),3:np.array([0.25,0.0,5000.0]),4:np.array([0.25,np.pi,5000.0])}
+    b = random.random() *(1 - 0) + 0
+    c = random.random() *(2*np.pi - 0) + 0
+    k = random.random() *(10000 - 0) + 0
+    # k = 1000.0
+    # material = secrets.choice([1,2,3,4])
+    
+    individual = np.array([b,c,k])
+    # return(np.copy(material_dict[material]))
+    return(individual)
+
+def mutate_morphology(masses,springs,spring_constants):
+    operation = np.random.choice(["Fatten", "Slim"],p=[0.75,0.25])
+    # operation = "Fatten"
+    # print(len(masses))
+    if len(masses) < 10 or operation == "Fatten":
+    # if operation == "Fatten":
+        masses2,springs2,spring_constants2 = fatten_cube(masses,springs,spring_constants)
+    else:
+        masses2,springs2,spring_constants2 = slim_cube(masses,springs,spring_constants) #this seems to work fine
+    
+    return(masses2,springs2,spring_constants2)

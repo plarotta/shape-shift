@@ -131,9 +131,20 @@ def get_spring_l(masses, spring):
         
 def initialize_scene(masses,springs,z, breath=False):
     # walls
+      
+    scene = canvas(width=1200,height=750,background=color.black)
+    # scene.camera.pos = vector(5,25,5)
+    v = wtext(text="0 m/s")  
+    
     if not breath:
         floor = box(pos=vector(0.5,z-0.06,0), height=0.02, length=100, width=100,color=color.white)
+        for x in range(-50,53,3):
+            gridx = curve(pos=[vector(x,z-0.06,50),vector(x,z-0.06,-50)],color=color.black)
+        for y in range(-50,53,3):
+            gridx = curve(pos=[vector(50,z-0.06,y),vector(-50,z-0.06,y)],color=color.black)
+   
     m_plots = []
+    
     for mass in masses:
         m_temp = sphere(pos=vector(mass[0][0],mass[0][1],mass[0][2]), radius=0.06, color=color.green)
         m_plots.append(m_temp)
@@ -145,9 +156,10 @@ def initialize_scene(masses,springs,z, breath=False):
         s_plots.append(s_temp)
     COM_pos = get_COM(masses)
     COM = sphere(pos=vector(COM_pos[0],COM_pos[1],COM_pos[2]), radius=0.06, color=color.yellow)
-    return(m_plots,s_plots,COM)
+    scene.camera.follow(COM)
+    return(m_plots,s_plots,COM,v)
 
-def update_scene(masses, springs, m_plots, s_plots, COM):
+def update_scene(masses, springs, m_plots, s_plots, COM,v,speed):
     for idx,m in enumerate(m_plots):
         m.pos = vector(masses[idx][0][0], masses[idx][0][1], masses[idx][0][2])
     
@@ -159,13 +171,14 @@ def update_scene(masses, springs, m_plots, s_plots, COM):
         s.length= get_spring_l(masses,springs[idx])
     COM_pos = get_COM(masses)
     COM.pos = vector(COM_pos[0],COM_pos[1],COM_pos[2])
+    v.text = str(str(round(speed,3))+" m/s")
 
 def run_simulation(masses, springs,final_T,increment, mu_static, mu_kinetic,floor,plot_energies=False, debug_mode = False):
     if debug_mode:
         masses = initialize_masses()
         springs = initialize_springs(masses)
     # masses[0][3] = np.array([300000,600000,400000])
-    m_obs, s_obs, COM = initialize_scene(masses, springs,z=floor-0.06)
+    m_obs, s_obs, COM,v = initialize_scene(masses, springs,z=floor-0.06)
     
     time.sleep(3)
     
@@ -173,12 +186,16 @@ def run_simulation(masses, springs,final_T,increment, mu_static, mu_kinetic,floo
     if plot_energies:
         energies = {"springs": [], "masses": []}
     for t in np.arange(0, final_T, increment):
-        interact(springs,masses,t,increment, mu_static,mu_kinetic,floor)
-        
         if t in times:
-            print(t)
+            p1 = get_COM(masses)
+            interact(springs,masses,t,increment, mu_static,mu_kinetic,floor)
+            p2 = get_COM(masses)
+            disp = np.linalg.norm(np.array([p2[0],0,p2[2]])-np.array([p1[0],0,p1[2]]))
+            speed = disp/increment
             rate(50)
-            update_scene(masses, springs,m_obs, s_obs, COM)
+            update_scene(masses, springs,m_obs, s_obs, COM,v,speed)
+        else:
+            interact(springs,masses,t,increment, mu_static,mu_kinetic,floor)
     if plot_energies:
         plot_energies(energies)
 # @njit()
@@ -190,7 +207,7 @@ def get_COM(masses):
     COMz = np.sum(masses[:,0,2]*0.1)/M
     return(np.array([COMx, COMy, COMz]))
 
-def eval_springs(masses,springs,spring_constants,final_T=3,increment=0.0002, render = False):
+def eval_springs(masses,springs,spring_constants,final_T=8,increment=0.0002, render = False):
     start = time.time()
     print("call to eval")
     for idx in range(len(springs)):
@@ -218,8 +235,8 @@ def rehome(masses):
     
 def evolve_robot(n_gen,gcp=False):
     # params
-    pop_size = 10
-    mut_rate = .7
+    pop_size = 42
+    mut_rate = .6
 
     # initialize ledgers
     next_gen = []
@@ -268,7 +285,6 @@ def evolve_robot(n_gen,gcp=False):
             [next_masses.append(pool_masses[parent_indices[i]]) for i in range(2)]
             [next_springs.append(pool_springs[parent_indices[i]]) for i in range(2)]
 
-
         print("Done making next generation.\n")
         # next generation becomes current population
         population_pool = [np.copy(i) for i in next_gen]
@@ -289,6 +305,7 @@ def evolve_robot(n_gen,gcp=False):
         gen_best = max(fits)
         best_fits.append(gen_best)
         print("Longest distance in generation was ",gen_best,"\n")
+        print("Size of fittest robot was ", len(population_pool[0]),"\n")
         
         # reset ledgers
         next_gen = []
@@ -310,41 +327,27 @@ def evolve_robot(n_gen,gcp=False):
 
 
 def breed_v3(parents,parent_indices, pool_masses, pool_springs):
-    print("breed call\n\n")
-    print("child1")
     p1,p2 = parents
-    print("p1 size: ",len(p1))
-    print("p2 size: ",len(p2))
-    n1 = random.choice(range(1,len(p1)))
+    n1 = secrets.choice(range(1,len(p1)))
     A = p1[:n1]
-    print("A: ", len(A))
     subset_max_size = len(p1)-len(A) if len(p1) - len(A) < len(p2) else len(p2)
-    subset_size = 1 if subset_max_size == 1 else random.choice(range(1,subset_max_size))
-    n2 = random.choice([i for i in range(0,len(p2)+1-subset_size)])
+    subset_size = 1 if subset_max_size == 1 else secrets.choice(range(1,subset_max_size))
+    n2 = secrets.choice([i for i in range(0,len(p2)+1-subset_size)])
     B = p2[n2:n2+subset_size]
-    print("B: ", len(B))
     C = p1[-(len(p1)-len(np.concatenate((A,B)))):] if len(np.concatenate((A,B))) < len(p1) else []
-    print("C: ", len(C))
     child1 = np.concatenate((A,B,C)) if C != [] else np.concatenate((A,B))
     
     ######
-    
-    print("child2")
-    
+        
     p2,p1 = parents
-    print("p1 size: ",len(p1))
-    print("p2 size: ",len(p2))
-    n1 = random.choice(range(1,len(p1)))
+    n1 = secrets.choice(range(1,len(p1)))
     A = p1[:n1]
-    print("A: ", len(A))
     subset_max_size = len(p1)-len(A) if len(p1) - len(A) < len(p2) else len(p2)
-    subset_size = 1 if subset_max_size == 1 else random.choice(range(1,subset_max_size))
-    n2 = random.choice([i for i in range(0,len(p2)+1-subset_size)])
+    subset_size = 1 if subset_max_size == 1 else secrets.choice(range(1,subset_max_size))
+    n2 = secrets.choice([i for i in range(0,len(p2)+1-subset_size)])
     B = p2[n2:n2+subset_size]
-    print("B: ", len(B))
-    C = p1[-(len(p1)-len(np.concatenate((A,B)))):] if len(np.concatenate((A,B))) < len(p1) else np.array([])
+    C = p1[-(len(p1)-len(np.concatenate((A,B)))):] if len(np.concatenate((A,B))) < len(p1) else []
 
-    print("C: ", len(C))
     child2 = np.concatenate((A,B,C)) if C != [] else np.concatenate((A,B))
     return(child1,child2)
 
@@ -403,11 +406,11 @@ def slim_cube(masses,springs,spring_constants):
     return(masses2,springs2,spring_constants2)
 
 def mutate_morphology(masses,springs,spring_constants):
-    # operation = np.random.choice(["Fatten", "Slim"],p=[0.75,0.25])
-    operation = "Fatten"
+    operation = np.random.choice(["Fatten", "Slim"],p=[0.75,0.25])
+    # operation = "Fatten"
     # print(len(masses))
-    # if len(masses) < 10 or operation == "Fatten":
-    if operation == "Fatten":
+    if len(masses) < 10 or operation == "Fatten":
+    # if operation == "Fatten":
         masses2,springs2,spring_constants2 = fatten_cube(masses,springs,spring_constants)
     else:
         masses2,springs2,spring_constants2 = slim_cube(masses,springs,spring_constants) #this seems to work fine
@@ -420,31 +423,18 @@ def spawn_individual(springs):
     individual = []
     num_springs = len(springs)
     individual = np.zeros(3*num_springs).reshape(num_springs,3)
-    # material_dict = {1:np.array([0.0,0.0,1000.0]),2:np.array([0.0,0.0,20000.0]),3:np.array([0.25,0.0,5000.0]),4:np.array([0.25,np.pi,5000.0])}
     for s in range(num_springs):
-            # random.random() *(upper - lower) + lower generates a random rational number in the range (lower,upper)
             b = random.random() *(1 - 0) + 0
             c = random.random() *(2*np.pi - 0) + 0
             k = random.random() *(10000 - 0) + 0
-            # k = 1000.0
-            # material = secrets.choice([1,2,3,4])
-            # print(np.array([b,c,k]))
-            # input("continue?\n")
-            # individual[s] = np.copy(material_dict[material])
             individual[s] = np.array([b,c,k])
     return(individual)
 
 def spawn_spring():
-    # random.random() *(upper - lower) + lower generates a random rational number in the range (lower,upper)
-    # material_dict = {1:np.array([0.0,0.0,1000.0]),2:np.array([0.0,0.0,20000.0]),3:np.array([0.25,0.0,5000.0]),4:np.array([0.25,np.pi,5000.0])}
     b = random.random() *(1 - 0) + 0
     c = random.random() *(2*np.pi - 0) + 0
     k = random.random() *(10000 - 0) + 0
-    # k = 1000.0
-    # material = secrets.choice([1,2,3,4])
-    
     individual = np.array([b,c,k])
-    # return(np.copy(material_dict[material]))
     return(individual)
 
 def initialize_population(population_size,springs):
@@ -467,77 +457,50 @@ def mutate_individual(mutation_rate, individual):
 
 
 if __name__ == "__main__":
-    # run_simulation(10,0.0001,0.9,0.7,-2,debug_mode=True)
+
     
+    for i in range(20):
+        best_fits,population_pool,pool_masses,pool_springs = evolve_robot(350,gcp=True)
 
-    best_fits,population_pool,pool_masses,pool_springs = evolve_robot(10)
+        with open( str("final_fits" + str(i) + ".pkl"), "wb" ) as f:
+            pickle.dump(best_fits,f)
+        
+        with open( str("final_pop_pools" + str(i) + ".pkl"), "wb" ) as f:
+            pickle.dump(population_pool,f)
+        
+        with open( str("final_mass_pools" + str(i) + ".pkl"), "wb" ) as f:
+            pickle.dump(pool_masses,f)
+        
+        with open( str("final_spring_pools" + str(i) + ".pkl"), "wb" ) as f:
+            pickle.dump(pool_springs,f)
+        
+        print(str("succeeded round " + str(i) + " of full run-through.\n")
+        
 
-    # with open('best_fits3.pkl', 'wb') as f:
-    #     pickle.dump(best_fits, f)
-
-    # with open('population_pool3.pkl', 'wb') as f:
-    #     pickle.dump(population_pool, f)
-    # with open('pool_masses3.pkl', 'wb') as f:
-    #     pickle.dump(pool_masses, f)
-
-    # with open('pool_springs3.pkl', 'wb') as f:
-    #     pickle.dump(pool_springs, f)
 
 
-    # open a file, where you stored the pickled data
+
+
+    # masses = initialize_masses()
+    # springs = initialize_springs(masses)
+    # initialize_scene(masses,springs,0, breath=False)
+    
+    # best_fits,population_pool,pool_masses,pool_springs = evolve_robot(3)
+
+
     # file = open('res5/pool_masses5.pkl', 'rb')
     # # dump information to that file
     # masses = pickle.load(file)
     # # close the file
     # file.close()
-
     # file = open('res5/pool_springs5.pkl', 'rb')
     # # dump information to that file
     # springs = pickle.load(file)
     # # close the file
     # file.close()
-
     # file = open('res5/population_pool5.pkl', 'rb')
     # # dump information to that file
     # constants = pickle.load(file)
     # # close the file
     # file.close()
-
-
     # eval_springs(masses, springs, constants,render=True)
-    # masses = initialize_masses()
-    # springs = initialize_springs(masses)
-    # # # print(springs)
-    # # # masses,springs = slim_cube(masses,springs)
-    # # # initialize_scene(masses,springs,0, breath=False)
-    # # # masses2,springs2 = fatten_cube(masses,springs)
-    # # # masses3,springs3 = fatten_cube(masses2,springs2)
-    # # # masses4,springs4 = fatten_cube(masses3,springs3)
-
-    # for i in range(18):
-    #     masses,springs,constants = mutate_morphology(masses,springs,spawn_individual(springs))
-    # # initialize_scene(masses,springs,0, breath=False)
-    # eval_springs(masses, springs, constants,render=True)
-    # print(mutate_morphology(masses,springs))
-
-
-
-    # with open('best_indiv.pkl', 'wb') as f:
-    #     pickle.dump(best_pal, f)
-
-    # with open('all_fits.pkl', 'wb') as f:
-    #     pickle.dump(best_fits, f)
-
-
-    # print(best_pal, '\n')
-    # print("======","\n")
-    # print(best_fits)
-    
-
-    # profiler = cProfile.Profile()
-    # profiler.enable()
-    # evolve_robot2(1)
-    # profiler.disable()
-    # stats = pstats.Stats(profiler).sort_stats('tottime')
-    # stats.dump_stats('export-data')
-    # stats.print_stats()
