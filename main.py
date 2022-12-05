@@ -489,54 +489,58 @@ if __name__ == "__main__":
     # best_fits,population_pool,pool_masses,pool_springs = evolve_robot(3)
 
 
-    file_n = "3"
+    # file_n = "3"
 
-    file = open('final3_num'+file_n+'/final3_mass_pools' +file_n+'.pkl', 'rb')
-    # dump information to that file
-    masses = pickle.load(file)
-    # close the file
-    file.close()
-    file = open('final3_num' +file_n+'/final3_spring_pools'+file_n+'.pkl', 'rb')
-    # dump information to that file
-    springs = pickle.load(file)
-    # close the file
-    file.close()
-    file = open('final3_num'+file_n+'/final3_pop_pools'+file_n+'.pkl', 'rb')
-    # dump information to that file
-    constants = pickle.load(file)
-    # close the file
-    file.close()
-    initialize_scene(masses,springs,0, breath=False)
-    # eval_springs(masses, springs, constants,render=True)
-
-
-    # file_n = "1"
-    # file = open('final_good_'+file_n+'/final4good_mass_pools' +file_n+'.pkl', 'rb')
+    # file = open('final3_num'+file_n+'/final3_mass_pools' +file_n+'.pkl', 'rb')
     # # dump information to that file
     # masses = pickle.load(file)
     # # close the file
     # file.close()
-    # file = open('final_good_' +file_n+'/final4good_spring_pools'+file_n+'.pkl', 'rb')
+    # file = open('final3_num' +file_n+'/final3_spring_pools'+file_n+'.pkl', 'rb')
     # # dump information to that file
     # springs = pickle.load(file)
     # # close the file
     # file.close()
-    # file = open('final_good_'+file_n+'/final4good_pop_pools'+file_n+'.pkl', 'rb')
+    # file = open('final3_num'+file_n+'/final3_pop_pools'+file_n+'.pkl', 'rb')
+    # # dump information to that file
+    # constants = pickle.load(file)
+    # # close the file
+    # file.close()
+    # initialize_scene(masses,springs,0, breath=False)
+    # eval_springs(masses, springs, constants,render=True)
+
+
+    # file_n = "2"
+    # file = open('final5_good_'+file_n+'/final5good_mass_pools' +file_n+'.pkl', 'rb')
+    # # dump information to that file
+    # masses = pickle.load(file)
+    # # close the file
+    # file.close()
+    # file = open('final5_good_' +file_n+'/final5good_spring_pools'+file_n+'.pkl', 'rb')
+    # # dump information to that file
+    # springs = pickle.load(file)
+    # # close the file
+    # file.close()
+    # file = open('final5_good_'+file_n+'/final5good_pop_pools'+file_n+'.pkl', 'rb')
     # # dump information to that file
     # constants = pickle.load(file)
     # # close the file
     # file.close()
 
 
-    # # run_simulation(masses, springs,6,0.0002,0.9,0.8,floor=-4)
+    # # # run_simulation(masses, springs,6,0.0002,0.9,0.8,floor=-4)
     # initialize_scene(masses,springs,0, breath=False)
 
     # eval_springs(masses, springs, constants,render=True)
 
+    file_n="2"
+    file = open('final4_good_' +file_n+'/final4good_fits'+file_n+'.pkl', 'rb')
+    # dump information to that file
+    fits = pickle.load(file)
 
-    # file = open('final_res' +file_n+'/final_fits'+file_n+'.pkl', 'rb')
-    # # dump information to that file
-    # fits = pickle.load(file)
 
-    # plt.plot(fits)
-    # plt.show()
+    plt.plot(fits)
+    plt.xlabel("Generation # (44 evaluations per generation)")
+    plt.ylabel("Fitness (total COM XY displacement in meters)")
+    plt.title("Learning Curve")
+    plt.show()
