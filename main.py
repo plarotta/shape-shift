@@ -86,7 +86,7 @@ def interact(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4,breath=Fal
     for s in springs:
         l = get_spring_l(masses,s)
         l_vect = masses[int(s[0][1])][0] - masses[int(s[0][0])][0]  
-        L0 = s[1][0] + s[1][1] * np.sin(2*t + s[1][2])
+        L0 = s[1][0] + s[1][1] * np.sin(4*t + s[1][2])
         f_k = s[1][3] * (l - L0)
         f_dir = f_k/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
         f_full = f_dir * l_vect
@@ -207,7 +207,7 @@ def get_COM(masses):
     COMz = np.sum(masses[:,0,2]*0.1)/M
     return(np.array([COMx, COMy, COMz]))
 
-def eval_springs(masses,springs,spring_constants,final_T=8,increment=0.0002, render = False):
+def eval_springs(masses,springs,spring_constants,final_T=4,increment=0.0002, render = False):
     start = time.time()
     print("call to eval")
     for idx in range(len(springs)):
@@ -313,7 +313,7 @@ def evolve_robot(n_gen,gcp=False):
         next_masses = []
 
         # mutate morphology on the bottom 50% 
-        for idx in range(int(len(population_pool)/2),len(population_pool)):
+        for idx in range(5,len(population_pool)):
             m,s,c = mutate_morphology(pool_masses[idx], pool_springs[idx], population_pool[idx])
             pool_masses[idx] = m
             pool_springs[idx] = s
@@ -459,22 +459,22 @@ def mutate_individual(mutation_rate, individual):
 if __name__ == "__main__":
 
     
-    for i in range(20):
-        best_fits,population_pool,pool_masses,pool_springs = evolve_robot(350,gcp=True)
+    # for i in range(20):
+    #     best_fits,population_pool,pool_masses,pool_springs = evolve_robot(350,gcp=True)
 
-        with open( str("final_fits" + str(i) + ".pkl"), "wb" ) as f:
-            pickle.dump(best_fits,f)
+    #     with open( str("final_fits" + str(i) + ".pkl"), "wb" ) as f:
+    #         pickle.dump(best_fits,f)
         
-        with open( str("final_pop_pools" + str(i) + ".pkl"), "wb" ) as f:
-            pickle.dump(population_pool,f)
+    #     with open( str("final_pop_pools" + str(i) + ".pkl"), "wb" ) as f:
+    #         pickle.dump(population_pool,f)
         
-        with open( str("final_mass_pools" + str(i) + ".pkl"), "wb" ) as f:
-            pickle.dump(pool_masses,f)
+    #     with open( str("final_mass_pools" + str(i) + ".pkl"), "wb" ) as f:
+    #         pickle.dump(pool_masses,f)
         
-        with open( str("final_spring_pools" + str(i) + ".pkl"), "wb" ) as f:
-            pickle.dump(pool_springs,f)
+    #     with open( str("final_spring_pools" + str(i) + ".pkl"), "wb" ) as f:
+    #         pickle.dump(pool_springs,f)
         
-        print(str("succeeded round " + str(i) + " of full run-through.\n"))
+    #     print(str("succeeded round " + str(i) + " of full run-through.\n"))
         
 
 
@@ -483,24 +483,60 @@ if __name__ == "__main__":
 
     # masses = initialize_masses()
     # springs = initialize_springs(masses)
+
     # initialize_scene(masses,springs,0, breath=False)
     
     # best_fits,population_pool,pool_masses,pool_springs = evolve_robot(3)
 
 
-    # file = open('res5/pool_masses5.pkl', 'rb')
+    file_n = "3"
+
+    file = open('final3_num'+file_n+'/final3_mass_pools' +file_n+'.pkl', 'rb')
+    # dump information to that file
+    masses = pickle.load(file)
+    # close the file
+    file.close()
+    file = open('final3_num' +file_n+'/final3_spring_pools'+file_n+'.pkl', 'rb')
+    # dump information to that file
+    springs = pickle.load(file)
+    # close the file
+    file.close()
+    file = open('final3_num'+file_n+'/final3_pop_pools'+file_n+'.pkl', 'rb')
+    # dump information to that file
+    constants = pickle.load(file)
+    # close the file
+    file.close()
+    initialize_scene(masses,springs,0, breath=False)
+    # eval_springs(masses, springs, constants,render=True)
+
+
+    # file_n = "1"
+    # file = open('final_good_'+file_n+'/final4good_mass_pools' +file_n+'.pkl', 'rb')
     # # dump information to that file
     # masses = pickle.load(file)
     # # close the file
     # file.close()
-    # file = open('res5/pool_springs5.pkl', 'rb')
+    # file = open('final_good_' +file_n+'/final4good_spring_pools'+file_n+'.pkl', 'rb')
     # # dump information to that file
     # springs = pickle.load(file)
     # # close the file
     # file.close()
-    # file = open('res5/population_pool5.pkl', 'rb')
+    # file = open('final_good_'+file_n+'/final4good_pop_pools'+file_n+'.pkl', 'rb')
     # # dump information to that file
     # constants = pickle.load(file)
     # # close the file
     # file.close()
+
+
+    # # run_simulation(masses, springs,6,0.0002,0.9,0.8,floor=-4)
+    # initialize_scene(masses,springs,0, breath=False)
+
     # eval_springs(masses, springs, constants,render=True)
+
+
+    # file = open('final_res' +file_n+'/final_fits'+file_n+'.pkl', 'rb')
+    # # dump information to that file
+    # fits = pickle.load(file)
+
+    # plt.plot(fits)
+    # plt.show()
