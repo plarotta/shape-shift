@@ -7,493 +7,521 @@ import secrets
 import random
 import copy
 import pickle
+from numba import njit, vectorize, jit
+import cProfile, pstats
+import re
 
-class Mass:
+# mass is going to become a 5x3 np array
+# mass = np.array(
+#                   np.array([0,0,0]), {current position}
+#                   np.array([0,0,0]), {velocity}
+#                   np.array([0,0,0]), {acceleration}
+#                   np.array([0,0,0]),  {net force}
+#                   np.array([0,0,0]), {initial position}
+# )
 
-    def __init__(self,mass, position=np.array([0,0,0]), velocity=np.array([0,0,0]), acceleration=np.array([0,0,0]), f_ext=np.array([0,0,0])):
-        self.mass = mass #float in kg
-        self.position = position #list in m [x,y,z]
-        self.velocity = velocity #list in m/s [dx/dt, dy/dt, dz/dt]
-        self.acceleration = acceleration #list in m/s^2 [d^2x/dt^2, d^2y/dt^2, d^2z/dt^2]
-        self.f_ext = f_ext #list of Ns [[x,y,z],[x,y,z]] # now just a np.array
+# spring is going to become a 3x2 np array
+# spring = np.array(
+#                   np.array([m1_idx, m2_idx, 0,0]),
+#                   np.array([a,b,c,k])  {a = rest length, b = sinusoid amplitude, c = sinusoid phase shift, k = spring constant}
+# )
 
-class Spring:
+def initialize_masses():
+    masses = np.zeros(120).reshape(8,5,3)
+    n = 0
+    for x in [0,1]:
+        for y in [0,1]:
+            for z in [0,1]:
+                masses[n][0] = np.array([float(x),float(y),float(z)])
+                masses[n][4] = np.array([float(x),float(y),float(z)])
+                n+=1
+    return(masses)
+
+def initialize_springs(masses):
+    first = True
+    for mass_idx1 in range(len(masses)):
+        for mass_idx2 in range(mass_idx1+1,len(masses)):
+            m1_p = masses[mass_idx1][0] #get pos
+            m2_p = masses[mass_idx2][0] #get pos
+            length = np.linalg.norm(m2_p-m1_p)
+            if first == True:
+                springs = np.array([[[mass_idx1, mass_idx2, 0, 0],[length, 0,0,5000]]])
+                first = False
+            else:
+                springs = np.concatenate((springs, np.array([[[mass_idx1, mass_idx2, 0, 0],[length, 0,0,5000]]])))
+    return(springs)
     
-    def __init__(self, l, k, idcs):
-        
-        
-        self.mass_indices = idcs
-        self.constants = {"a": l,"b": 0, "c":0, "k": k}
-        self.rest_length = l
-        self.spring_constant = self.constants["k"]
-    
-class Simulation:
+@njit()
+def interact_fast(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4,breath=False):
+    for s in springs:
+        l = get_spring_l(masses,s)
+        l_vect = masses[int(s[0][1])][0] - masses[int(s[0][0])][0]  
+        L0 = s[1][0] + s[1][1] * np.sin(4*t + s[1][2])
+        f_k = s[1][3] * (l - L0)
+        f_dir = f_k/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
+        f_full = f_dir * l_vect
+        masses[int(s[0][0])][3] = masses[int(s[0][0])][3] + f_full
+        masses[int(s[0][1])][3] = masses[int(s[0][1])][3] - f_full
+    for m in masses:   
+        m[3] = m[3] + np.array([0,-9.81,0]) #gravity
+        if m[0][1] <= floor:
+            f_net = m[3]
+            Fp = np.array([f_net[0], 0.0, f_net[2]])
+            Fp_norm = np.sqrt(Fp[0]**2 + Fp[2]**2)
+            Fn = np.array([0.0, f_net[1], 0.0])
+            Fn_norm = f_net[1]
+            if Fp_norm < abs(Fn_norm * mu_static): #friction
+                m[3] = m[3] - np.array([f_net[0],0.0,f_net[2]])                
+            else:
+                dirFn = mu_kinetic*Fn_norm*np.array([f_net[0], 0.0, f_net[2]])/Fp_norm #friction
+                m[3] = m[3] - np.array([dirFn[0],0.0,dirFn[2]])
 
-    def __init__(self, dt, T, w_masses, k_springs):
-        self.increment = dt
-        self.final_T = T
-        self.mass_w = w_masses
-        self.spring_k = k_springs
-        self.masses = self.initialize_masses()
-        self.springs = self.initialize_springs()
-        self.mu_static = 0.9
-        self.mu_kinetic = 0.7
-    
-    def initialize_masses(self):
-        masses = []
-        for x in [0,1]:
-            for y in [0,1]:
-                for z in [0,1]:
-                    masses.append(Mass(self.mass_w, position=np.array([x,y,z])))
-        
+            if m[0][1] < floor: #floor reaction force
+                ry = 10000*(abs(m[0][1] - floor))
+                m[3] = m[3] + np.array([0,ry,0])
+        integrate(m,increment)
 
-        return(masses)
-        
-    def initialize_springs(self):
-        springs = []
-        for mass_idx1 in range(len(self.masses)):
-            for mass_idx2 in range(mass_idx1+1,len(self.masses)):
-                m1_p = self.masses[mass_idx1].position
-                m2_p = self.masses[mass_idx2].position
-                length = np.linalg.norm(m2_p-m1_p)
-                springs.append(Spring(length, self.spring_k, [mass_idx1, mass_idx2]))
-        return(springs)
- 
-    def interact(self,t,floor=-4,breath=False):
-        for s in self.springs:
-            l = self.get_spring_l(s)
-            l_vect = np.array( self.masses[s.mass_indices[1]].position -  self.masses[s.mass_indices[0]].position  )
-            L0 = s.constants["a"] + s.constants["b"] * np.sin(5*t + s.constants["c"])
-            f_k = s.spring_constant * (l - L0)
-            f_dir = f_k/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
-            f_kx = f_dir * l_vect[0]
-            f_ky = f_dir * l_vect[1]
-            f_kz = f_dir * l_vect[2]
-            self.masses[s.mass_indices[0]].f_ext = self.masses[s.mass_indices[0]].f_ext + np.array([f_kx, f_ky, f_kz])
-            self.masses[s.mass_indices[1]].f_ext = self.masses[s.mass_indices[1]].f_ext + np.array([-f_kx, -f_ky, -f_kz]) 
-        start = time.time()
-        for m in self.masses:   
-            m.f_ext = m.f_ext + np.array([0,-9.81,0]) #gravity
+#useful unjitted interact function for debugging
+def interact(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4,breath=False):
+    for s in springs:
+        l = get_spring_l(masses,s)
+        l_vect = masses[int(s[0][1])][0] - masses[int(s[0][0])][0]  
+        L0 = s[1][0] + s[1][1] * np.sin(4*t + s[1][2])
+        f_k = s[1][3] * (l - L0)
+        f_dir = f_k/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
+        f_full = f_dir * l_vect
+        masses[int(s[0][0])][3] = masses[int(s[0][0])][3] + f_full
+        masses[int(s[0][1])][3] = masses[int(s[0][1])][3] - f_full
+    for m in masses:   
+        m[3] = m[3] + np.array([0,-9.81,0]) #gravity
+        if m[0][1] <= floor:
+            f_net = m[3]
+            Fp = np.array([f_net[0], 0.0, f_net[2]])
+            Fp_norm = np.sqrt(Fp[0]**2 + Fp[2]**2)
+            Fn = np.array([0.0, f_net[1], 0.0])
+            Fn_norm = f_net[1]
+            if Fp_norm < Fn_norm * mu_static: #friction
+                m[3] = m[3] - np.array([f_net[0],0.0,f_net[2]])                
+            else:
+                dirFn = mu_kinetic*Fn_norm*np.array([f_net[0], 0.0, f_net[2]])/Fp_norm #friction
+                m[3] = m[3] - np.array([dirFn[0],0.0,dirFn[2]])
 
-            if m.position[1] <= floor:
-                
-                f_netx=m.f_ext[0]
-                f_nety=m.f_ext[1]
-                f_netz=m.f_ext[2]
-                Fp = np.array([f_netx, 0, f_netz])
-                Fp_norm = np.linalg.norm(Fp)
-                Fn = np.array([0, f_nety, 0])
-                Fn_norm = np.linalg.norm(Fn)
-                if Fp_norm < Fn_norm * self.mu_static: #friction
-                    m.f_ext = m.f_ext - np.array([f_netx,0,f_netz])
-                    
+            if m[0][1] < floor:
+                ry = 10000*(abs(m[0][1] - floor))
+                m[3] = m[3] + np.array([0,ry,0])
+        integrate(m,increment)
 
-                else:
-                    dirFn = self.mu_kinetic*Fn_norm*np.array([f_netx, 0, f_netz])/Fp_norm #friction
-                    m.f_ext = m.f_ext - np.array([dirFn[0],0,dirFn[2]])
-
-                if m.position[1] < floor:
-                    ry = 10000*(abs(round(m.position[1],3) - floor))
-                    m.f_ext = m.f_ext + np.array([0,ry,0])
-
-
-            self.integrate(m,floor)
+@njit()
+def integrate(mass,increment):
+    mass[2] = mass[3]/0.1
+    mass[1] = mass[1] + mass[2]*increment
+    mass[1] = mass[1] * 0.9985
+    mass[0] = mass[0] + mass[1]*increment
+    mass[3] = np.array([0.0,0.0,0.0])
 
     
-    def integrate(self, mass,floor):
-        mass.acceleration = mass.f_ext/0.1
-        mass.velocity = mass.velocity + mass.acceleration*self.increment
-        mass.velocity = mass.velocity * 0.9985
-        mass.position = mass.position + mass.velocity*0.0002
-        mass.f_ext = np.array([0,0,0])
-
-
-    def plot_energies(self, es):
-        plt.plot(range(len(es["springs"])), es["springs"], 'r',label="Energy from the springs")
-        plt.plot(range(len(es["masses"])), es["masses"],'g',label="Energy from the masses")
-        plt.plot(range(len(es["masses"])), [es["springs"][i] + es["masses"][i] for i in range(len(es["springs"]))],'b',label="Total energy")
-        plt.xlabel("time step")
-        plt.ylabel("J")
-        plt.title("Energy curve at 0.999 damping")
-        plt.show()
-
-    def calc_energy(self):
-        spring_e = sum([abs(0.5*spring.spring_constant * (self.get_spring_l(spring)-spring.rest_length)**2) for spring in self.springs])
-        mass_e = sum([0.5 * mass.mass * mass.velocity**2 for mass in self.masses]) 
-        uM = []
-        for mass in self.masses:
-            if mass.position[1] > -4:
-                uM.append(mass.position[1] + 4)
-        mass_e += sum([abs(i*9.81*0.1) for i in uM])
-        return(spring_e, mass_e)
-       
-
-    def get_spring_l(self, spring):
-        # m1_idx1 = spring.mass_indices[0]
-        # m2_idx2 = spring.mass_indices[1]
-        # m1_p = self.masses[spring.mass_indices[0]].position
-        # m2_p = self.masses[spring.mass_indices[1]].position
-        # length = np.linalg.norm(m2_p-m1_p)
-        return(np.linalg.norm(self.masses[spring.mass_indices[1]].position-self.masses[spring.mass_indices[0]].position))
-            
-    def initialize_scene(self,z, breath=False):
-        # walls
-        if not breath:
-            floor = box(pos=vector(0.5,z-0.06,0), height=0.02, length=15, width=15,color=color.white)
-
-        m_plots = []
-        for mass in self.masses:
-            m_temp = sphere(pos=vector(mass.position[0],mass.position[1],mass.position[2]), radius=0.06, color=color.green)
-            m_plots.append(m_temp)
-
-        s_plots = []
-        for spring in self.springs:
-            m1_pos = self.masses[spring.mass_indices[0]].position
-            m2_pos = self.masses[spring.mass_indices[1]].position
-            s_temp = cylinder(pos=vector(m1_pos[0], m1_pos[1], m1_pos[2]), axis=vector(m2_pos[0]-m1_pos[0], m2_pos[1]-m1_pos[1], m2_pos[2]-m1_pos[2]), length=self.get_spring_l(spring),color=color.red, radius=0.01)
-            s_plots.append(s_temp)
-        COM_pos = self.get_COM()
-        COM = sphere(pos=vector(COM_pos[0],COM_pos[1],COM_pos[2]), radius=0.06, color=color.yellow)
-
-        return(m_plots,s_plots,COM)
-
-    def update_scene(self, m_plots, s_plots, COM):
-        for idx,m in enumerate(m_plots):
-            m.pos = vector(self.masses[idx].position[0], self.masses[idx].position[1], self.masses[idx].position[2])
+@njit()
+def get_spring_l(masses, spring):
+    m1_idx1 = spring[0][0]
+    m2_idx2 = spring[0][1]
+    m1_p = masses[int(m1_idx1)][0]
+    m2_p = masses[int(m2_idx2)][0]
+    diff = m2_p-m1_p
+    return(np.sqrt(diff[0]**2 + diff[1]**2 + diff[2]**2))
         
-        for idx,s in enumerate(s_plots):
-            m1_pos = self.masses[self.springs[idx].mass_indices[0]].position
-            m2_pos = self.masses[self.springs[idx].mass_indices[1]].position
-            s.pos = vector(m1_pos[0], m1_pos[1], m1_pos[2])
-            s.axis = vector(m2_pos[0]-m1_pos[0], m2_pos[1]-m1_pos[1], m2_pos[2]-m1_pos[2])
-            s.length=self.get_spring_l(self.springs[idx])
-        COM_pos = self.get_COM()
-        COM.pos = vector(COM_pos[0],COM_pos[1],COM_pos[2])
-
-    def run_simulation(self,plot_energies=False):
-        # self.masses[0].f_ext = self.masses[0].f_ext +np.array([30000,0,4000])
-        m_obs, s_obs, COM = self.initialize_scene(z=-0.06)
-        time.sleep(6)
-        
-        times = np.arange(0,self.final_T, 0.02)
-        if plot_energies:
-            energies = {"springs": [], "masses": []}
-        for t in np.arange(0, self.final_T, self.increment):
-            if plot_energies:
-                spre, mase = self.calc_energy()
-                energies["springs"].append(spre)
-                energies["masses"].append(mase)
-            self.interact(t,floor=0)
-            if t in times:
-                rate(50)
-                print("\n")
-                print(t,"s")
-                self.update_scene(m_obs, s_obs, COM)
-        if plot_energies:
-            self.plot_energies(energies)
+def initialize_scene(masses,springs,z, breath=False):
+    # walls
+      
+    scene = canvas(width=1200,height=750,background=color.black)
+    # scene.camera.pos = vector(5,25,5)
+    v = wtext(text="0 m/s")  
     
-    def get_COM(self):
-        M = sum([m.mass for m in self.masses])
-        COMx = sum([m.mass*m.position[0] for m in self.masses])/M
-        COMy = sum([m.mass*m.position[1] for m in self.masses])/M
-        COMz = sum([m.mass*m.position[2] for m in self.masses])/M
-        return(np.array([COMx, COMy, COMz]))
+    if not breath:
+        floor = box(pos=vector(0.5,z-0.06,0), height=0.02, length=100, width=100,color=color.white)
+        for x in range(-50,53,3):
+            gridx = curve(pos=[vector(x,z-0.06,50),vector(x,z-0.06,-50)],color=color.black)
+        for y in range(-50,53,3):
+            gridx = curve(pos=[vector(50,z-0.06,y),vector(-50,z-0.06,y)],color=color.black)
+   
+    m_plots = []
+    
+    for mass in masses:
+        m_temp = sphere(pos=vector(mass[0][0],mass[0][1],mass[0][2]), radius=0.06, color=color.green)
+        m_plots.append(m_temp)
+    s_plots = []
+    for spring in springs:
+        m1_pos = masses[int(spring[0][0])][0]
+        m2_pos = masses[int(spring[0][1])][0]
+        s_temp = cylinder(pos=vector(m1_pos[0], m1_pos[1], m1_pos[2]), axis=vector(m2_pos[0]-m1_pos[0], m2_pos[1]-m1_pos[1], m2_pos[2]-m1_pos[2]), length=get_spring_l(masses,spring),color=color.red, radius=0.01)
+        s_plots.append(s_temp)
+    COM_pos = get_COM(masses)
+    COM = sphere(pos=vector(COM_pos[0],COM_pos[1],COM_pos[2]), radius=0.06, color=color.yellow)
+    scene.camera.follow(COM)
+    return(m_plots,s_plots,COM,v)
 
-def eval_springs(springs, render = False,T=2):
+def update_scene(masses, springs, m_plots, s_plots, COM,v,speed):
+    for idx,m in enumerate(m_plots):
+        m.pos = vector(masses[idx][0][0], masses[idx][0][1], masses[idx][0][2])
+    
+    for idx,s in enumerate(s_plots):
+        m1_pos = masses[int(springs[idx][0][0])][0]
+        m2_pos = masses[int(springs[idx][0][1])][0]
+        s.pos = vector(m1_pos[0], m1_pos[1], m1_pos[2])
+        s.axis = vector(m2_pos[0]-m1_pos[0], m2_pos[1]-m1_pos[1], m2_pos[2]-m1_pos[2])
+        s.length= get_spring_l(masses,springs[idx])
+    COM_pos = get_COM(masses)
+    COM.pos = vector(COM_pos[0],COM_pos[1],COM_pos[2])
+    v.text = str(str(round(speed,3))+" m/s")
+
+def run_simulation(masses, springs,final_T,increment, mu_static, mu_kinetic,floor,plot_energies=False, debug_mode = False):
+    if debug_mode:
+        masses = initialize_masses()
+        springs = initialize_springs(masses)
+    # masses[0][3] = np.array([300000,600000,400000])
+    m_obs, s_obs, COM,v = initialize_scene(masses, springs,z=floor-0.06)
+    
+    time.sleep(3)
+    
+    times = np.arange(0, final_T, 0.02)
+    if plot_energies:
+        energies = {"springs": [], "masses": []}
+    for t in np.arange(0, final_T, increment):
+        if t in times:
+            p1 = get_COM(masses)
+            interact(springs,masses,t,increment, mu_static,mu_kinetic,floor)
+            p2 = get_COM(masses)
+            disp = np.linalg.norm(np.array([p2[0],0,p2[2]])-np.array([p1[0],0,p1[2]]))
+            speed = disp/increment
+            rate(50)
+            update_scene(masses, springs,m_obs, s_obs, COM,v,speed)
+        else:
+            interact(springs,masses,t,increment, mu_static,mu_kinetic,floor)
+    if plot_energies:
+        plot_energies(energies)
+# @njit()
+def get_COM(masses):
+    M = sum([0.1 for m in masses])
+    masses[:,0,0]
+    COMx = np.sum(masses[:,0,0]*0.1)/M
+    COMy = np.sum(masses[:,0,1]*0.1)/M
+    COMz = np.sum(masses[:,0,2]*0.1)/M
+    return(np.array([COMx, COMy, COMz]))
+
+def eval_springs(masses,springs,spring_constants,final_T=4,increment=0.0002, render = False):
     start = time.time()
-    sim = Simulation(dt=0.0002,T=T, w_masses=0.1, k_springs=10000)
-
     print("call to eval")
-    for idx in range(len(sim.springs)):
-        sim.springs[idx].constants["b"] = springs[idx][0]
-        sim.springs[idx].constants["c"] = springs[idx][1]
-        sim.springs[idx].constants["k"] = springs[idx][2]
-        sim.springs[idx].spring_constant = springs[idx][2]
-
+    for idx in range(len(springs)):
+        springs[idx][1][1] = spring_constants[idx][0]
+        springs[idx][1][2] = spring_constants[idx][1]
+        springs[idx][1][3] = spring_constants[idx][2]
     if render:
-        sim.run_simulation()
+        run_simulation(masses, springs,6,0.0002,0.9,0.8,0)
     else:
-        p1 = sim.get_COM()
-        for t in np.arange(0, sim.final_T, sim.increment):
-            sim.interact(t,floor=0)
-        p2 = sim.get_COM()
+        p1 = get_COM(masses)
+        for t in np.arange(0, final_T, increment):
+            interact_fast(springs,masses,t,increment,0.9,0.8,floor=0)
+        p2 = get_COM(masses)
         print("eval time: ", time.time()-start)
+        rehome(masses) #reset current state of the masses
         return(np.linalg.norm(np.array([p2[0],0,p2[2]])-np.array([p1[0],0,p1[2]])))
 
-
-def evolve_robot(n_gen):
-
-    #initialize population [done]
-    #loop
-        #select [done]
-        #breed [done]
-        #mutate [done]
-    #return best indiv
-
-    '''
-    Encoding: 
-    [
-        [b1,c1,k1], spring 1 params
-        [b2,c2,k2], spring 2 params
-        [b3,c3,k3], spring 3 params
-        [b4,c4,k4] spring 4 params
-    ] 
-
-    Mutation:
-    -choose random spring
-    -change the value of each of its params by some delta. different delta for each param
-
-    Selection:
-    -rank-based
-
-    Crossover:
-    *two-point crossover*
-    -choose n1 and n2
-    -child1: for 0 to n1 parent1.springs[0:n1]=parent2.springs[0:n1], 
-             for n1 to n2 pass
-             for n2 to end parent1.springs[n1:n2]=parent2.springs[n1:n2]
-    -child2: complement of child2
+def rehome(masses):
+    for m in masses:
+        pos0 = m[4]
+        m[0] = pos0
+        m[1] = np.array([0.0, 0.0, 0.0])
+        m[2] = np.array([0.0, 0.0, 0.0])
+        m[3] = np.array([0.0, 0.0, 0.0])
     
-    '''
-    sim = Simulation(dt=0.0002,T=1.5, w_masses=0.1, k_springs=10000)
-    springs = sim.springs
-    evolve = Evolution(springs=springs, ngen=n_gen)
-    population_pool = evolve.initialize_population()
-    
-    # eval_springs(population_pool[0],True)
-    # raise ValueError
-    fits = [eval_springs(i) for i in population_pool]
-    population_pool = [population_pool[i] for i in np.argsort(fits)]
-    population_pool = list(reversed(population_pool))
+def evolve_robot(n_gen,gcp=False):
+    # params
+    pop_size = 42
+    mut_rate = .6
+
+    # initialize ledgers
     next_gen = []
+    next_masses = []
+    next_springs = []
     best_fits = []
-    
 
+    # initialialize starting population
+    masses = initialize_masses()
+    springs = initialize_springs(masses)
+    population_pool = initialize_population(pop_size,springs)
+    pool_springs = [springs for idx in range(len(population_pool))]
+    pool_masses = [masses for idx in range(len(population_pool))] 
 
-    for i in range(evolve.generations):
-        print("Began generation ", i, "...")
-        population_pool = population_pool[:int(len(population_pool)/2)]
-        while len(next_gen) < evolve.population_size:
-            
-            parents = evolve.ranked_selection(population_pool, 0.2)
-            children = evolve.breed(parents)
-            children = [evolve.mutate_individual(c) for c in children]
-            [next_gen.append(p) for p in parents]
-            [next_gen.append(c) for c in children]
-        print("Done making next generation.")
-        population_pool = [i for i in next_gen]
-        fits = [eval_springs(i) for i in population_pool]
-        population_pool = [population_pool[i] for i in np.argsort(fits)]
-        population_pool = list(reversed(population_pool))
-        gen_best = max(fits)
-        print("Longest distance in generation was ",gen_best)
-        best_fits.append(gen_best)
-        next_gen = []
-    input("Render best solution?")
-    eval_springs(population_pool[0], render=True)
-    
-    return(best_fits, population_pool[0])
-    
+    # mutate every individual of the starting population
+    for idx in range(len(population_pool)):
+        m,s,c = mutate_morphology(pool_masses[idx], pool_springs[idx], population_pool[idx])
+        pool_masses[idx] = m
+        pool_springs[idx] = s
+        population_pool[idx] = c
 
-
-def evolve_robot2(n_gen):
-     # initialize starting population
-    # calculate the fitnesses for the population and sort population accordingly
-
-    # repeat for each generation
-        # initialize set for storing the individuals for the next generation
-        # repeat until the population for the next generation is ready
-            # select 2 parents from current generation
-            # crossover the 2 parents
-            # select who moves to the next generation via deterministic crowding
-            # add the 2 diverse and fit bois to the next generation's population
-        # replace the current generation population with the next generation's population
-        # calculate the fitnesses for the population and sort population accordingly
-        # check generation diversity
-        # store the value of the best fitness of the generation
-    
-    #return the best individual of the latest generation
-    sim = Simulation(dt=0.0002,T=1.5, w_masses=0.1, k_springs=10000)
-    springs = sim.springs
-    evolve = Evolution(springs=springs, ngen=n_gen)
-    population_pool = evolve.initialize_population()
-    # eval_springs(population_pool[0],True)
-    # raise ValueError
-    
-    fits = [eval_springs(i) for i in population_pool]
-    print("succeeded first set of evals")
-    
-    population_pool = [population_pool[i] for i in np.argsort(fits)]
+    # fitness-sort population
+    fits = [eval_springs(pool_masses[i],pool_springs[i],population_pool[i]) for i in range(len(population_pool))]
+    arginds = np.argsort(fits)
+    population_pool = [population_pool[i] for i in arginds]
+    pool_masses = [pool_masses[i] for i in arginds]
+    pool_springs = [pool_springs[i] for i in arginds]
     population_pool = list(reversed(population_pool))
-    next_gen = []
-    best_fits = []
+    pool_masses = list(reversed(pool_masses))
+    pool_springs = list(reversed(pool_springs))
 
     for i in range(n_gen):
-        print("Starting generation ", str(i+1),"...")
-        next_gen = set()
-        while len(next_gen) < evolve.population_size:
-            #print('len =', len(next_gen))
-            parents = evolve.ranked_selection(population_pool, 0.2)
-            children = evolve.breed(parents)
-            evolve.det_crowd(next_gen,parents,children,population_pool,sim)
-            next_gen.add(tuple(evolve.spawn_individual()))
-            next_gen.add(tuple(evolve.spawn_individual()))
+        print("Began generation ", i, "...\n")
+        while len(next_gen) < pop_size:
+            parents,parent_indices = ranked_selection(population_pool, 0.15) 
+            children = breed_v3(parents,parent_indices, pool_masses, pool_springs)
+            children = [mutate_individual(mut_rate,c) for c in children]
+            
+            # add parents to next generation
+            [next_gen.append(p) for p in parents] 
+            [next_masses.append(pool_masses[parent_indices[i]]) for i in range(2)]
+            [next_springs.append(pool_springs[parent_indices[i]]) for i in range(2)]
 
+            # add children to next generation
+            [next_gen.append(c) for c in children]
+            [next_masses.append(pool_masses[parent_indices[i]]) for i in range(2)]
+            [next_springs.append(pool_springs[parent_indices[i]]) for i in range(2)]
+
+        print("Done making next generation.\n")
+        # next generation becomes current population
+        population_pool = [np.copy(i) for i in next_gen]
+        pool_masses = [np.copy(j) for j in next_masses]
+        pool_springs = [np.copy(k) for k in next_springs]
         
-        population_pool = [list(i) for i in next_gen] 
-        fits = [eval_springs(i) for i in population_pool]
-        population_pool = [population_pool[i] for i in np.argsort(fits)]
+        # fitness-sort new current population
+        fits = [eval_springs(pool_masses[i],pool_springs[i],population_pool[i]) for i in range(len(population_pool))]
+        arginds = np.argsort(fits)
+        population_pool = [population_pool[i] for i in arginds] 
+        pool_masses = [pool_masses[i] for i in arginds]
+        pool_springs = [pool_springs[i] for i in arginds]
         population_pool = list(reversed(population_pool))
-        print("Gen best: ",max(fits))
-        best_fits.append(max(fits))
-    input("Render best solution?")
-    eval_springs(population_pool[0], render=True)
+        pool_masses = list(reversed(pool_masses))
+        pool_springs = list(reversed(pool_springs))
+
+        # keep generation's best
+        gen_best = max(fits)
+        best_fits.append(gen_best)
+        print("Longest distance in generation was ",gen_best,"\n")
+        print("Size of fittest robot was ", len(population_pool[0]),"\n")
+        
+        # reset ledgers
+        next_gen = []
+        next_springs = []
+        next_masses = []
+
+        # mutate morphology on the bottom 50% 
+        for idx in range(5,len(population_pool)):
+            m,s,c = mutate_morphology(pool_masses[idx], pool_springs[idx], population_pool[idx])
+            pool_masses[idx] = m
+            pool_springs[idx] = s
+            population_pool[idx] = c
+        
+    if not gcp:
+        input("Render best solution? \n")
+        eval_springs(pool_masses[0], pool_springs[0],population_pool[0], render=True) 
     
-    return(population_pool[0],best_fits)
+    return(best_fits, population_pool[0],pool_masses[0],pool_springs[0])
 
 
-class Evolution():
-    def __init__(self, springs, ngen):
-        self.generations = ngen
-        self.population_size = 30
-        self.mutation_rate = 0.8
-        self.crossover_rate = 1
-        self.springs = springs
-        self.material_dict = {1:(0,0,1000),2:(0,0,20000),3:(0.25,0,5000),4:(0.25,pi,5000)}
+def breed_v3(parents,parent_indices, pool_masses, pool_springs):
+    p1,p2 = parents
+    n1 = secrets.choice(range(1,len(p1)))
+    A = p1[:n1]
+    subset_max_size = len(p1)-len(A) if len(p1) - len(A) < len(p2) else len(p2)
+    subset_size = 1 if subset_max_size == 1 else secrets.choice(range(1,subset_max_size))
+    n2 = secrets.choice([i for i in range(0,len(p2)+1-subset_size)])
+    B = p2[n2:n2+subset_size]
+    C = p1[-(len(p1)-len(np.concatenate((A,B)))):] if len(np.concatenate((A,B))) < len(p1) else []
+    child1 = np.concatenate((A,B,C)) if C != [] else np.concatenate((A,B))
     
+    ######
+        
+    p2,p1 = parents
+    n1 = secrets.choice(range(1,len(p1)))
+    A = p1[:n1]
+    subset_max_size = len(p1)-len(A) if len(p1) - len(A) < len(p2) else len(p2)
+    subset_size = 1 if subset_max_size == 1 else secrets.choice(range(1,subset_max_size))
+    n2 = secrets.choice([i for i in range(0,len(p2)+1-subset_size)])
+    B = p2[n2:n2+subset_size]
+    C = p1[-(len(p1)-len(np.concatenate((A,B)))):] if len(np.concatenate((A,B))) < len(p1) else []
 
-    def det_crowd(self,next_pop,parents,children,population_pool,sim):
-        p1_f = eval_springs(parents[0])
-        p2_f = eval_springs(parents[1])
-        c1_f = eval_springs(children[0]) 
-        c2_f = eval_springs(children[1])
-        if self.distance([parents[0], children[0]]) + self.distance([parents[1], children[1]]) < self.distance([parents[0], children[1]]) + self.distance([parents[1], children[0]]):
-            if c2_f > p2_f:
-                mut = self.mutate_individual(children[1])
-                if eval_springs(mut) > c2_f:
-                    next_pop.add(tuple(mut))
-                else:
-                    next_pop.add(tuple(children[1])) 
-            else:
-                next_pop.add(tuple(parents[1]))
-            if c1_f > p1_f:
-                mut = self.mutate_individual(children[0])
-                if eval_springs(mut) > c1_f:
-                    next_pop.add(tuple(mut))
-                else:
-                    next_pop.add(tuple(children[0]))
-            else:
-                next_pop.add(tuple(parents[0]))
-        else:
-            if c2_f > p1_f:
-                mut = self.mutate_individual(children[1])
-                if eval_springs(mut) > c2_f:
-                    next_pop.add(tuple(mut))
-                else:
-                    next_pop.add(tuple(children[1])) 
-            else:
-                next_pop.add(tuple(parents[0]))
-            if c1_f > p2_f:
-                mut = self.mutate_individual(children[0])
-                if eval_springs(mut) > c1_f:
-                    next_pop.add(tuple(mut))
-                else:
-                    next_pop.add(tuple(children[0])) 
-            else:
-                next_pop.add(tuple(parents[1]))
+    child2 = np.concatenate((A,B,C)) if C != [] else np.concatenate((A,B))
+    return(child1,child2)
 
 
-    def spawn_individual(self):
-        individual = []
-        num_springs = len(self.springs)
-        for s in range(num_springs):
-                # 4 materials
-                material = secrets.choice([1,2,3,4])
-                # b = random.random() *(1 - 0) + 0
-                # c = random.random() *(2*pi - 0) + 0
-                # k = random.random() *(100000 - 0) + 0
-                # individual.append((b,c,k))
 
-                individual.append(self.material_dict[material])
+def ranked_selection( population_pool,p_c):
+    probabilities = np.array([((1-p_c)**((i+1)-1))*p_c for i in range(len(population_pool)-1)] + [(1-p_c)**(len(population_pool))])
+    probabilities /= probabilities.sum()
+    indices = list(range(len(population_pool)))
+    indices = np.random.choice(indices,size=2, p=probabilities, replace=False)
+    chosen_ones = [population_pool[c] for c in indices]
+    return(chosen_ones,indices)
+
+
+def append_point(point,masses,springs,spring_constants):
+    mass = np.array([point,np.array([0.0,0.0,0.0]),np.array([0.0,0.0,0.0]),np.array([0.0,0.0,0.0]),point])
+    masses = np.append(masses,mass).reshape(len(masses)+1,5,3)
+    for mass_idx1 in range(len(masses)-1):
+        m1_p = masses[mass_idx1][0] #get pos
+        length = np.linalg.norm(m1_p-point)
+        spring = np.array([[[mass_idx1, len(masses)-1, 0, 0],[length, 0,0,5000]]])
+        springs = np.concatenate((springs,spring))
+        spring_constants = np.concatenate((spring_constants, np.array([spawn_spring()])))
+    return(masses, springs,spring_constants)
+
+
+def fatten_cube(masses,springs,spring_constants):
+    invalid_point = True
+    while invalid_point:
+        chosen_masses = np.array(random.choices(masses,k=3))
+        ch_m_pos = chosen_masses[:,0,:] 
+        v1 = ch_m_pos[0]-ch_m_pos[1]
+        v2 = ch_m_pos[2]-ch_m_pos[1]
+        normal_vect = np.cross(v1,v2)
+        range_x = np.array([np.mean(ch_m_pos[:,0])-random.random(), np.mean(ch_m_pos[:,0])*1.8+random.random()])
+        range_y = np.array([np.mean(ch_m_pos[:,1])-random.random(), np.mean(ch_m_pos[:,1])*1.8+random.random()])
+        range_z = np.array([np.mean(ch_m_pos[:,2])-random.random(), np.mean(ch_m_pos[:,2])*1.8+random.random()])
+        point = np.array([ random.random() *(range_x[1] - range_x[0]) + range_x[0] , random.random() *(range_y[1] - range_y[0]) + range_y[0] , random.random() *(range_z[1] - range_z[0]) + range_z[0] ])
+        if point[1] < 0:
+            continue
+        point = point + random.random()*normal_vect
+        if point[1] < 0:
+            continue
+        invalid_point = False
+        masses2,springs2,spring_constants2 = append_point(point,masses,springs,spring_constants)
+    return(masses2,springs2,spring_constants2)
+
+def slim_cube(masses,springs,spring_constants):
+    chosen_mass_idx = secrets.choice(range(len(masses)))
+    masses2 = np.delete(masses,chosen_mass_idx,axis=0)
+    springs_idxs = springs[:,0,0:2]
+    springs_to_remove = np.argwhere(springs_idxs == float(chosen_mass_idx))[:,0]
+    springs2 = np.delete(springs, springs_to_remove,axis=0)
+    spring_constants2 = np.delete(spring_constants, springs_to_remove,axis=0)
+    springs2[:,0,0:2] = np.where(springs2[:,0,0:2] > float(chosen_mass_idx),springs2[:,0,0:2] -1,springs2[:,0,0:2])
+    return(masses2,springs2,spring_constants2)
+
+def mutate_morphology(masses,springs,spring_constants):
+    operation = np.random.choice(["Fatten", "Slim"],p=[0.75,0.25])
+    # operation = "Fatten"
+    # print(len(masses))
+    if len(masses) < 10 or operation == "Fatten":
+    # if operation == "Fatten":
+        masses2,springs2,spring_constants2 = fatten_cube(masses,springs,spring_constants)
+    else:
+        masses2,springs2,spring_constants2 = slim_cube(masses,springs,spring_constants) #this seems to work fine
+    
+    return(masses2,springs2,spring_constants2)
+
+
+
+def spawn_individual(springs):
+    individual = []
+    num_springs = len(springs)
+    individual = np.zeros(3*num_springs).reshape(num_springs,3)
+    for s in range(num_springs):
+            b = random.random() *(1 - 0) + 0
+            c = random.random() *(2*np.pi - 0) + 0
+            k = random.random() *(10000 - 0) + 0
+            individual[s] = np.array([b,c,k])
+    return(individual)
+
+def spawn_spring():
+    b = random.random() *(1 - 0) + 0
+    c = random.random() *(2*np.pi - 0) + 0
+    k = random.random() *(10000 - 0) + 0
+    individual = np.array([b,c,k])
+    return(individual)
+
+def initialize_population(population_size,springs):
+    pool = []
+    for i in range(population_size):
+        pool.append(spawn_individual(springs))
+    return(pool)
+
+def mutate_individual(mutation_rate, individual):
+    if random.choices([True, False], weights=[mutation_rate, 1-mutation_rate], k=1)[0]:
+        indiv = copy.deepcopy(individual)
+        chosen_s_idx = secrets.choice(range(len(indiv)))
+        newb = indiv[chosen_s_idx][0]+random.random() *(indiv[chosen_s_idx][0]*0.35 + indiv[chosen_s_idx][0]*0.35) - indiv[chosen_s_idx][0]*0.35
+        newc = indiv[chosen_s_idx][1]+random.random() *(indiv[chosen_s_idx][1]*0.35 + indiv[chosen_s_idx][1]*0.35) - indiv[chosen_s_idx][1]*0.35
+        newk = indiv[chosen_s_idx][2]+random.random() *(indiv[chosen_s_idx][2]*0.35 + indiv[chosen_s_idx][2]*0.35) - indiv[chosen_s_idx][2]*0.35
+        indiv[chosen_s_idx] = (newb, newc, newk)
+        return(indiv)
+    else:
         return(individual)
 
-    def initialize_population(self):
-        pool = []
-        for i in range(self.population_size):
-            pool.append(self.spawn_individual())
-        return(pool)
-
-    def mutate_individual(self, individual):
-        
-        if random.choices([True, False], weights=[self.mutation_rate, 1-self.mutation_rate], k=1)[0]:
-            indiv = copy.deepcopy(individual)
-            chosen_s_idx = secrets.choice(range(len(indiv)))
-            newb = indiv[chosen_s_idx][0]+random.random() *(indiv[chosen_s_idx][0]*0.2 + indiv[chosen_s_idx][0]*0.2) - indiv[chosen_s_idx][0]*0.2
-            newc = indiv[chosen_s_idx][1]+random.random() *(indiv[chosen_s_idx][1]*0.2 + indiv[chosen_s_idx][1]*0.2) - indiv[chosen_s_idx][1]*0.2
-            newk = indiv[chosen_s_idx][2]+random.random() *(indiv[chosen_s_idx][2]*0.2 + indiv[chosen_s_idx][2]*0.2) - indiv[chosen_s_idx][2]*0.2
-            indiv[chosen_s_idx] = (newb, newc, newk)
-            return(indiv)
-        else:
-            return(individual)
-    
-    def breed(self, parents):
-        n1 = secrets.choice(range(len(self.springs)))
-        n2 = secrets.choice(range(len(self.springs)))
-        if n1 == n2:
-            n2 = secrets.choice(range(len(self.springs)))
-        n1, n2 = sorted([n1,n2])
-        child1 = parents[0][0:n1] + parents[1][n1:n2] + parents[0][n2:]
-        child2 = parents[1][0:n1] + parents[0][n1:n2] + parents[1][n2:]
-        return(child1, child2)
-
-    def ranked_selection(self, population_pool,p_c):
-        probabilities = np.array([((1-p_c)**((i+1)-1))*p_c for i in range(len(population_pool)-1)] + [(1-p_c)**(len(population_pool))])
-        probabilities /= probabilities.sum()
-        indices = list(range(len(population_pool)))
-        chosen_ones = [population_pool[c] for c in np.random.choice(indices,size=2, p=probabilities, replace=False)]
-        return(chosen_ones)
-
-    def distance(self, individuals):
-        b_tot = sum([abs(individuals[0][i][0] - individuals[1][i][0]) for i in range(len(individuals[0]))])
-        c_tot = sum([abs(individuals[0][i][1] - individuals[1][i][1])/(2*pi) for i in range(len(individuals[0]))])
-        k_tot = sum([abs(individuals[0][i][2] - individuals[1][i][2])/100000 for i in range(len(individuals[0]))])
-        return(sum([b_tot,c_tot,k_tot]))
 
 
 
 if __name__ == "__main__":
 
-    # best_pal, best_fits = evolve_robot2(50)
 
-    # with open('best_indiv4.pkl', 'wb') as f:
-    #     pickle.dump(best_pal, f)
+    # masses = initialize_masses()
+    # springs = initialize_springs(masses)
 
-    # with open('all_fits4.pkl', 'wb') as f:
-    #     pickle.dump(best_fits, f)
-
-
-    with open('all_fits6-tr.pkl', 'rb') as f:
-        params = pickle.load(f)
-    with open('best_indiv6-tr.pkl', 'rb') as f:
-        fits = pickle.load(f)
+    # initialize_scene(masses,springs,0, breath=False)
     
-    eval_springs(params,render=True,T=10)
-    plt.plot(range(len(fits)),fits)
-    
-    plt.xlabel("generation #")
-    plt.ylabel("COM displacement (m)")
-    plt.title("Learning curve for cube robot evolution")
-    plt.show()
+    # best_fits,population_pool,pool_masses,pool_springs = evolve_robot(3)
 
 
-    
+    # file_n = "3"
+
+    # file = open('final3_num'+file_n+'/final3_mass_pools' +file_n+'.pkl', 'rb')
+    # # dump information to that file
+    # masses = pickle.load(file)
+    # # close the file
+    # file.close()
+    # file = open('final3_num' +file_n+'/final3_spring_pools'+file_n+'.pkl', 'rb')
+    # # dump information to that file
+    # springs = pickle.load(file)
+    # # close the file
+    # file.close()
+    # file = open('final3_num'+file_n+'/final3_pop_pools'+file_n+'.pkl', 'rb')
+    # # dump information to that file
+    # constants = pickle.load(file)
+    # # close the file
+    # file.close()
+    # initialize_scene(masses,springs,0, breath=False)
+    # eval_springs(masses, springs, constants,render=True)
 
 
-    
+    # file_n = "7"
+    # #7 is good
+    # file = open('results/final4_good_'+file_n+'/final4good_mass_pools' +file_n+'.pkl', 'rb')
+    # # dump information to that file
+    # masses = pickle.load(file)
+    # # close the file
+    # file.close()
+    # file = open('results/final4_good_' +file_n+'/final4good_spring_pools'+file_n+'.pkl', 'rb')
+    # # dump information to that file
+    # springs = pickle.load(file)
+    # # close the file
+    # file.close()
+    # file = open('results/final4_good_'+file_n+'/final4good_pop_pools'+file_n+'.pkl', 'rb')
+    # # dump information to that file
+    # constants = pickle.load(file)
+    # # close the file
+    # file.close()
 
 
-    
+    # # # run_simulation(masses, springs,6,0.0002,0.9,0.8,floor=-4)
+    # # initialize_scene(masses,springs,0, breath=False)
+
+    # eval_springs(masses, springs, constants,render=True)
+
+    # file_n="2"
+    # file = open('final4_good_' +file_n+'/final4good_fits'+file_n+'.pkl', 'rb')
+    # # dump information to that file
+    # fits = pickle.load(file)
 
 
-
-
+    # plt.plot(fits)
+    # plt.xlabel("Generation # (44 evaluations per generation)")
+    # plt.ylabel("Fitness (total COM XY displacement in meters)")
+    # plt.title("Learning Curve")
+    # plt.show()
