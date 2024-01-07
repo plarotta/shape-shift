@@ -456,29 +456,9 @@ def mutate_individual(mutation_rate, individual):
         return(individual)
 
 
+
+
 if __name__ == "__main__":
-
-    
-    # for i in range(20):
-    #     best_fits,population_pool,pool_masses,pool_springs = evolve_robot(350,gcp=True)
-
-    #     with open( str("final_fits" + str(i) + ".pkl"), "wb" ) as f:
-    #         pickle.dump(best_fits,f)
-        
-    #     with open( str("final_pop_pools" + str(i) + ".pkl"), "wb" ) as f:
-    #         pickle.dump(population_pool,f)
-        
-    #     with open( str("final_mass_pools" + str(i) + ".pkl"), "wb" ) as f:
-    #         pickle.dump(pool_masses,f)
-        
-    #     with open( str("final_spring_pools" + str(i) + ".pkl"), "wb" ) as f:
-    #         pickle.dump(pool_springs,f)
-        
-    #     print(str("succeeded round " + str(i) + " of full run-through.\n"))
-        
-
-
-
 
 
     # masses = initialize_masses()
@@ -510,18 +490,19 @@ if __name__ == "__main__":
     # eval_springs(masses, springs, constants,render=True)
 
 
-    # file_n = "2"
-    # file = open('final5_good_'+file_n+'/final5good_mass_pools' +file_n+'.pkl', 'rb')
+    # file_n = "7"
+    # #7 is good
+    # file = open('results/final4_good_'+file_n+'/final4good_mass_pools' +file_n+'.pkl', 'rb')
     # # dump information to that file
     # masses = pickle.load(file)
     # # close the file
     # file.close()
-    # file = open('final5_good_' +file_n+'/final5good_spring_pools'+file_n+'.pkl', 'rb')
+    # file = open('results/final4_good_' +file_n+'/final4good_spring_pools'+file_n+'.pkl', 'rb')
     # # dump information to that file
     # springs = pickle.load(file)
     # # close the file
     # file.close()
-    # file = open('final5_good_'+file_n+'/final5good_pop_pools'+file_n+'.pkl', 'rb')
+    # file = open('results/final4_good_'+file_n+'/final4good_pop_pools'+file_n+'.pkl', 'rb')
     # # dump information to that file
     # constants = pickle.load(file)
     # # close the file
@@ -529,18 +510,18 @@ if __name__ == "__main__":
 
 
     # # # run_simulation(masses, springs,6,0.0002,0.9,0.8,floor=-4)
-    # initialize_scene(masses,springs,0, breath=False)
+    # # initialize_scene(masses,springs,0, breath=False)
 
     # eval_springs(masses, springs, constants,render=True)
 
-    file_n="2"
-    file = open('final4_good_' +file_n+'/final4good_fits'+file_n+'.pkl', 'rb')
-    # dump information to that file
-    fits = pickle.load(file)
+    # file_n="2"
+    # file = open('final4_good_' +file_n+'/final4good_fits'+file_n+'.pkl', 'rb')
+    # # dump information to that file
+    # fits = pickle.load(file)
 
 
-    plt.plot(fits)
-    plt.xlabel("Generation # (44 evaluations per generation)")
-    plt.ylabel("Fitness (total COM XY displacement in meters)")
-    plt.title("Learning Curve")
-    plt.show()
+    # plt.plot(fits)
+    # plt.xlabel("Generation # (44 evaluations per generation)")
+    # plt.ylabel("Fitness (total COM XY displacement in meters)")
+    # plt.title("Learning Curve")
+    # plt.show()
