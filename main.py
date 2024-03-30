@@ -11,45 +11,9 @@ from numba import njit, vectorize, jit
 import cProfile, pstats
 import re
 
-# mass is going to become a 5x3 np array
-# mass = np.array(
-#                   np.array([0,0,0]), {current position}
-#                   np.array([0,0,0]), {velocity}
-#                   np.array([0,0,0]), {acceleration}
-#                   np.array([0,0,0]),  {net force}
-#                   np.array([0,0,0]), {initial position}
-# )
 
-# spring is going to become a 3x2 np array
-# spring = np.array(
-#                   np.array([m1_idx, m2_idx, 0,0]),
-#                   np.array([a,b,c,k])  {a = rest length, b = sinusoid amplitude, c = sinusoid phase shift, k = spring constant}
-# )
 
-def initialize_masses():
-    masses = np.zeros(120).reshape(8,5,3)
-    n = 0
-    for x in [0,1]:
-        for y in [0,1]:
-            for z in [0,1]:
-                masses[n][0] = np.array([float(x),float(y),float(z)])
-                masses[n][4] = np.array([float(x),float(y),float(z)])
-                n+=1
-    return(masses)
 
-def initialize_springs(masses):
-    first = True
-    for mass_idx1 in range(len(masses)):
-        for mass_idx2 in range(mass_idx1+1,len(masses)):
-            m1_p = masses[mass_idx1][0] #get pos
-            m2_p = masses[mass_idx2][0] #get pos
-            length = np.linalg.norm(m2_p-m1_p)
-            if first == True:
-                springs = np.array([[[mass_idx1, mass_idx2, 0, 0],[length, 0,0,5000]]])
-                first = False
-            else:
-                springs = np.concatenate((springs, np.array([[[mass_idx1, mass_idx2, 0, 0],[length, 0,0,5000]]])))
-    return(springs)
     
 @njit()
 def interact_fast(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4,breath=False):
@@ -198,7 +162,7 @@ def run_simulation(masses, springs,final_T,increment, mu_static, mu_kinetic,floo
             interact(springs,masses,t,increment, mu_static,mu_kinetic,floor)
     if plot_energies:
         plot_energies(energies)
-# @njit()
+@njit()
 def get_COM(masses):
     M = sum([0.1 for m in masses])
     masses[:,0,0]
@@ -461,12 +425,25 @@ def mutate_individual(mutation_rate, individual):
 if __name__ == "__main__":
 
 
-    # masses = initialize_masses()
-    # springs = initialize_springs(masses)
+    masses = initialize_masses()
+    springs = initialize_springs(masses)
 
-    # initialize_scene(masses,springs,0, breath=False)
+    # scene = canvas(width=1200,height=750,background=color.black)
+    # scene.camera.pos = vector(5,25,5)
+    # v = wtext(text="0 m/s")  
+    # z=0.0
     
-    # best_fits,population_pool,pool_masses,pool_springs = evolve_robot(3)
+
+    # floor = box(height=0.02, length=100.0, width=100.0,color=color.white,pos=vector(0.5,z-0.06,0))
+    # for x in range(-50,53,3):
+    #     gridx = curve(pos=[vector(x,z-0.06,50),vector(x,z-0.06,-50)],color=color.black)
+    # for y in range(-50,53,3):
+    #     gridx = curve(pos=[vector(50,z-0.06,y),vector(-50,z-0.06,y)],color=color.black)
+   
+
+    initialize_scene(masses,springs,0, breath=False)
+    
+    best_fits,population_pool,pool_masses,pool_springs = evolve_robot(3)
 
 
     # file_n = "3"

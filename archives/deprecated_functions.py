@@ -248,3 +248,32 @@ def mutate_morphology(masses,springs,spring_constants):
         masses2,springs2,spring_constants2 = slim_cube(masses,springs,spring_constants) #this seems to work fine
     
     return(masses2,springs2,spring_constants2)
+
+def interact(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4,breath=False):
+    for s in springs:
+        l = get_spring_l(masses,s)
+        l_vect = masses[int(s[0][1])][0] - masses[int(s[0][0])][0]  
+        L0 = s[1][0] + s[1][1] * np.sin(4*t + s[1][2])
+        f_k = s[1][3] * (l - L0)
+        f_dir = f_k/np.sqrt(l_vect[0]**2 + l_vect[1]**2 + l_vect[2]**2)
+        f_full = f_dir * l_vect
+        masses[int(s[0][0])][3] = masses[int(s[0][0])][3] + f_full
+        masses[int(s[0][1])][3] = masses[int(s[0][1])][3] - f_full
+    for m in masses:   
+        m[3] = m[3] + np.array([0,-9.81,0]) #gravity
+        if m[0][1] <= floor:
+            f_net = m[3]
+            Fp = np.array([f_net[0], 0.0, f_net[2]])
+            Fp_norm = np.sqrt(Fp[0]**2 + Fp[2]**2)
+            Fn = np.array([0.0, f_net[1], 0.0])
+            Fn_norm = f_net[1]
+            if Fp_norm < Fn_norm * mu_static: #friction
+                m[3] = m[3] - np.array([f_net[0],0.0,f_net[2]])                
+            else:
+                dirFn = mu_kinetic*Fn_norm*np.array([f_net[0], 0.0, f_net[2]])/Fp_norm #friction
+                m[3] = m[3] - np.array([dirFn[0],0.0,dirFn[2]])
+
+            if m[0][1] < floor:
+                ry = 10000*(abs(m[0][1] - floor))
+                m[3] = m[3] + np.array([0,ry,0])
+        integrate(m,increment)
