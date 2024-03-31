@@ -4,7 +4,25 @@ from tqdm import tqdm
 import pickle
 import os
 from datetime import datetime
+import sys
+import os
+sys.path.append(os.getcwd())
 
+# mass is going to become a 5x3 np array
+# mass = np.array(
+#                   np.array([0,0,0]), {current position}
+#                   np.array([0,0,0]), {velocity}
+#                   np.array([0,0,0]), {acceleration}
+#                   np.array([0,0,0]),  {net force}
+#                   np.array([0,0,0]), {initial position}
+# )
+
+# spring is going to become a 3x2 np array
+# spring = np.array(
+#                   np.array([m1_idx, m2_idx, 0,0]),
+#                   np.array([a,b,c,k])  {a = rest length, b = sinusoid amplitude, c = sinusoid phase shift, k = spring constant}
+# )
+  
 
 class Simulation():
     def __init__(self, masses=None, springs=None):

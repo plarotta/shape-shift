@@ -10,6 +10,10 @@ import pickle
 from numba import njit, vectorize, jit
 import cProfile, pstats
 import re
+import sys
+import os
+sys.path.append(os.getcwd())
+from simulate.fast_utils import get_COM_fast, get_spring_l_fast
 
 
 def initialize_scene(masses,springs,z, breath=False):
@@ -35,9 +39,9 @@ def initialize_scene(masses,springs,z, breath=False):
     for spring in springs:
         m1_pos = masses[int(spring[0][0])][0]
         m2_pos = masses[int(spring[0][1])][0]
-        s_temp = cylinder(pos=vector(m1_pos[0], m1_pos[1], m1_pos[2]), axis=vector(m2_pos[0]-m1_pos[0], m2_pos[1]-m1_pos[1], m2_pos[2]-m1_pos[2]), length=get_spring_l(masses,spring),color=color.red, radius=0.01)
+        s_temp = cylinder(pos=vector(m1_pos[0], m1_pos[1], m1_pos[2]), axis=vector(m2_pos[0]-m1_pos[0], m2_pos[1]-m1_pos[1], m2_pos[2]-m1_pos[2]), length=get_spring_l_fast(masses,spring),color=color.red, radius=0.01)
         s_plots.append(s_temp)
-    COM_pos = get_COM(masses)
+    COM_pos = get_COM_fast(masses)
     COM = sphere(pos=vector(COM_pos[0],COM_pos[1],COM_pos[2]), radius=0.06, color=color.yellow)
     scene.camera.follow(COM)
     return(m_plots,s_plots,COM,v)
@@ -52,33 +56,52 @@ def update_scene(masses, springs, m_plots, s_plots, COM,v,speed):
         m2_pos = masses[int(springs[idx][0][1])][0]
         s.pos = vector(m1_pos[0], m1_pos[1], m1_pos[2])
         s.axis = vector(m2_pos[0]-m1_pos[0], m2_pos[1]-m1_pos[1], m2_pos[2]-m1_pos[2])
-        s.length= get_spring_l(masses,springs[idx])
-    COM_pos = get_COM(masses)
+        s.length= get_spring_l_fast(masses,springs[idx])
+    COM_pos = get_COM_fast(masses)
     COM.pos = vector(COM_pos[0],COM_pos[1],COM_pos[2])
     v.text = str(str(round(speed,3))+" m/s")
 
-def visualize_simulation(masses, springs,final_T,increment, mu_static, mu_kinetic,floor,plot_energies=False, debug_mode = False):
-    if debug_mode:
-        masses = initialize_masses()
-        springs = initialize_springs(masses)
-    # masses[0][3] = np.array([300000,600000,400000])
-    m_obs, s_obs, COM,v = initialize_scene(masses, springs,z=floor-0.06)
+def visualize_simulation(path_to_sim, final_T,increment, mu_static, mu_kinetic,floor):
+
+    
     
     time.sleep(3)
     
-    times = np.arange(0, final_T, 0.02)
-    if plot_energies:
-        energies = {"springs": [], "masses": []}
-    for t in np.arange(0, final_T, increment):
-        if t in times:
-            p1 = get_COM(masses)
-            interact_fast(springs,masses,t,increment, mu_static,mu_kinetic,floor)
-            p2 = get_COM(masses)
-            disp = np.linalg.norm(np.array([p2[0],0,p2[2]])-np.array([p1[0],0,p1[2]]))
-            speed = disp/increment
-            rate(5)
-            update_scene(masses, springs, m_obs, s_obs, COM,v,speed)
-        else:
-            interact_fast(springs,masses,t,increment, mu_static,mu_kinetic,floor)
-    if plot_energies:
-        plot_energies(energies)
+    # times = np.arange(0, final_T, 0.02)
+
+    with open(path_to_sim, 'rb') as handle:
+        sim_logger = pickle.load(handle)
+    
+    timestamps = sorted(list(sim_logger.keys()))
+    # print(timestamps)
+
+    m_obs, s_obs, COM,v = initialize_scene(sim_logger[timestamps[0]]['masses'], 
+                                           sim_logger[timestamps[0]]['springs'],
+                                           z=floor-0.06)
+
+
+    for t in timestamps[1:]:
+        rate(5)
+        update_scene(sim_logger[timestamps[0]]['masses'], 
+                     sim_logger[timestamps[0]]['springs'], 
+                     m_obs, 
+                     s_obs, 
+                     COM,
+                     v,
+                     sim_logger[timestamps[0]]['speed'])
+
+    # for t in np.arange(0, final_T, increment):
+    #     if t in times:
+    #         p1 = get_COM(masses)
+    #         interact_fast(springs,masses,t,increment, mu_static,mu_kinetic,floor)
+    #         p2 = get_COM(masses)
+    #         disp = np.linalg.norm(np.array([p2[0],0,p2[2]])-np.array([p1[0],0,p1[2]]))
+    #         speed = disp/increment
+    #         rate(5)
+    #         update_scene(masses, springs, m_obs, s_obs, COM,v,speed)
+    #     else:
+    #         interact_fast(springs,masses,t,increment, mu_static,mu_kinetic,floor)
+    
+
+if __name__ == "__main__":
+    visualize_simulation("/Users/plarotta/software/Evolving-Robots/simulate/saved_logs/3-30-2024-0-21-59.pkl",4,5,3,4,0)

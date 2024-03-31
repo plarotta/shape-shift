@@ -1,32 +1,7 @@
-import time
 import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from vpython import *
-import secrets
-import random
-import copy
-import pickle
 from numba import njit, vectorize, jit
-import cProfile, pstats
-import re
 
-
-# mass is going to become a 5x3 np array
-# mass = np.array(
-#                   np.array([0,0,0]), {current position}
-#                   np.array([0,0,0]), {velocity}
-#                   np.array([0,0,0]), {acceleration}
-#                   np.array([0,0,0]),  {net force}
-#                   np.array([0,0,0]), {initial position}
-# )
-
-# spring is going to become a 3x2 np array
-# spring = np.array(
-#                   np.array([m1_idx, m2_idx, 0,0]),
-#                   np.array([a,b,c,k])  {a = rest length, b = sinusoid amplitude, c = sinusoid phase shift, k = spring constant}
-# )
-    
+  
 @njit()
 def interact_fast(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4):
     for s in springs:
@@ -65,7 +40,6 @@ def integrate_fast(mass,increment):
     mass[0] = mass[0] + mass[1]*increment
     mass[3] = np.array([0.0,0.0,0.0])
 
-
 @njit()
 def get_spring_l_fast(masses, spring):
     m1_idx1 = spring[0][0]
@@ -84,12 +58,3 @@ def get_COM_fast(masses):
     COMz = np.sum(masses[:,0,2]*0.1)/M
     return(np.array([COMx, COMy, COMz]))
 
-
-
-
-
-
-if __name__ == "__main__":
-    masses = initialize_masses()
-    springs = initialize_springs(masses)
-    run_simulation(masses, springs,6,0.0002,0.9,0.8,floor=-10)
