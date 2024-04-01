@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit, vectorize, jit
+from numba import njit 
 import scipy # this import is needed for JIT on np.linalg methods
 
 # mass is going to become a 5x3 np array
@@ -17,7 +17,7 @@ import scipy # this import is needed for JIT on np.linalg methods
 #                   np.array([a,b,c,k])  {a = rest length, b = sinusoid amplitude, c = sinusoid phase shift, k = spring constant}
 # )
   
-@njit()
+@njit(nogil=True, fastmath=True)
 def interact_fast(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4):
     for s in springs:
         l = get_spring_l_fast(masses,s)

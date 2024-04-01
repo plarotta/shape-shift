@@ -1,3 +1,5 @@
+'''wrappers to display simulation data using vpython'''
+
 import time
 from vpython import *
 import pickle

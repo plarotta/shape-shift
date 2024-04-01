@@ -7,7 +7,6 @@ import secrets
 import random
 import copy
 
-
 class Evolution(Simulation):
     def __init__(self, masses=None, springs=None):
         super().__init__(masses, springs)
@@ -27,7 +26,7 @@ class Evolution(Simulation):
             m[2] = np.array([0.0, 0.0, 0.0])
             m[3] = np.array([0.0, 0.0, 0.0])
     
-    def eval_springs(self, masses,springs,spring_constants,final_T=4,increment=0.0002):
+    def eval_springs(self, masses,springs,spring_constants,final_T=4,increment=0.001):
         for idx in range(len(springs)):
             springs[idx][1][1] = spring_constants[idx][0]
             springs[idx][1][2] = spring_constants[idx][1]
@@ -121,7 +120,7 @@ class Evolution(Simulation):
         else:
             return(individual)
         
-    def ranked_selection( population_pool,p_c):
+    def ranked_selection(self, population_pool,p_c):
         probabilities = np.array([((1-p_c)**((i+1)-1))*p_c for i in range(len(population_pool)-1)] + [(1-p_c)**(len(population_pool))])
         probabilities /= probabilities.sum()
         indices = list(range(len(population_pool)))

@@ -65,11 +65,11 @@ class Simulation():
     def get_spring_l(self, masses, springs):
         return(get_spring_l_fast(masses, springs))
     
-    def integrate(self, m):
-        integrate_fast(m, self.time_step)
+    def integrate(self, m, time_step):
+        integrate_fast(m, time_step)
     
-    def interact(self, springs, masses, t):
-        interact_fast(springs, masses, t, self.time_step, self.mu_s, self. mu_k, self.floor_z_pos)
+    def interact(self, springs, masses, t, time_step, mu_s, mu_k, floor):
+        interact_fast(springs, masses, t, time_step, mu_s, mu_k, floor=floor)
 
     def run_simulation(self, sim_length, time_step, log_k, mu_s, mu_k, floor_z_position, save=False):   
         for i,t in enumerate(tqdm(np.arange(0, sim_length, time_step))):
