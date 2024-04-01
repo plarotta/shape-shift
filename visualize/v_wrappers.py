@@ -1,15 +1,6 @@
 import time
-import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 from vpython import *
-import secrets
-import random
-import copy
 import pickle
-from numba import njit, vectorize, jit
-import cProfile, pstats
-import re
 import sys
 import os
 sys.path.append(os.getcwd())

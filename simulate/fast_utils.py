@@ -2,7 +2,6 @@ import numpy as np
 from numba import njit, vectorize, jit
 import scipy # this import is needed for JIT on np.linalg methods
 
-
 # mass is going to become a 5x3 np array
 # mass = np.array(
 #                   np.array([0,0,0]), {current position}
