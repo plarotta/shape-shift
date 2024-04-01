@@ -61,47 +61,30 @@ def update_scene(masses, springs, m_plots, s_plots, COM,v,speed):
     COM.pos = vector(COM_pos[0],COM_pos[1],COM_pos[2])
     v.text = str(str(round(speed,3))+" m/s")
 
-def visualize_simulation(path_to_sim, final_T,increment, mu_static, mu_kinetic,floor):
-
-    
-    
-    time.sleep(3)
-    
-    # times = np.arange(0, final_T, 0.02)
-
+def visualize_simulation(path_to_sim,floor):
+    time.sleep(6)
     with open(path_to_sim, 'rb') as handle:
         sim_logger = pickle.load(handle)
     
     timestamps = sorted(list(sim_logger.keys()))
-    # print(timestamps)
-
     m_obs, s_obs, COM,v = initialize_scene(sim_logger[timestamps[0]]['masses'], 
                                            sim_logger[timestamps[0]]['springs'],
                                            z=floor-0.06)
-
-
-    for t in timestamps[1:]:
-        rate(5)
-        update_scene(sim_logger[timestamps[0]]['masses'], 
-                     sim_logger[timestamps[0]]['springs'], 
+    for i,t in enumerate(timestamps[1:]):
+        print(f'sim time: {t:.2f}')
+        rate(50)
+        update_scene(sim_logger[timestamps[i]]['masses'], 
+                     sim_logger[timestamps[i]]['springs'], 
                      m_obs, 
                      s_obs, 
                      COM,
                      v,
-                     sim_logger[timestamps[0]]['speed'])
-
-    # for t in np.arange(0, final_T, increment):
-    #     if t in times:
-    #         p1 = get_COM(masses)
-    #         interact_fast(springs,masses,t,increment, mu_static,mu_kinetic,floor)
-    #         p2 = get_COM(masses)
-    #         disp = np.linalg.norm(np.array([p2[0],0,p2[2]])-np.array([p1[0],0,p1[2]]))
-    #         speed = disp/increment
-    #         rate(5)
-    #         update_scene(masses, springs, m_obs, s_obs, COM,v,speed)
-    #     else:
-    #         interact_fast(springs,masses,t,increment, mu_static,mu_kinetic,floor)
-    
+                     sim_logger[timestamps[i]]['speed'])
 
 if __name__ == "__main__":
-    visualize_simulation("/Users/plarotta/software/Evolving-Robots/simulate/saved_logs/3-30-2024-0-21-59.pkl",4,5,3,4,0)
+    
+    from simulate.fast_utils import *
+    from simulate.simulation import *
+    a = Simulation()
+    sim_path = a.run_simulation(sim_length=20, time_step=0.001, log_k=5, mu_s=0.5, mu_k=0.3, floor_z_position=-4, save=True)
+    visualize_simulation(sim_path, floor=-4)

@@ -1,6 +1,22 @@
 import numpy as np
 from numba import njit, vectorize, jit
+import scipy # this import is needed for JIT on np.linalg methods
 
+
+# mass is going to become a 5x3 np array
+# mass = np.array(
+#                   np.array([0,0,0]), {current position}
+#                   np.array([0,0,0]), {velocity}
+#                   np.array([0,0,0]), {acceleration}
+#                   np.array([0,0,0]),  {net force}
+#                   np.array([0,0,0]), {initial position}
+# )
+
+# spring is going to become a 3x2 np array
+# spring = np.array(
+#                   np.array([m1_idx, m2_idx, 0,0]),
+#                   np.array([a,b,c,k])  {a = rest length, b = sinusoid amplitude, c = sinusoid phase shift, k = spring constant}
+# )
   
 @njit()
 def interact_fast(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4):
@@ -14,29 +30,31 @@ def interact_fast(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4):
         masses[int(s[0][0])][3] = masses[int(s[0][0])][3] + f_full
         masses[int(s[0][1])][3] = masses[int(s[0][1])][3] - f_full
     for m in masses:   
-        m[3] = m[3] + np.array([0,-9.81,0]) #gravity
-        if m[0][1] <= floor:
+        # m[3] = m[3] + np.array([0,-9.81,0]) 
+        g = 9.81
+        m[3][1] = m[3][1] - g #gravity
+        if m[0][1] < floor:
             f_net = m[3]
             Fp = np.array([f_net[0], 0.0, f_net[2]])
-            Fp_norm = np.sqrt(Fp[0]**2 + Fp[2]**2)
-            Fn = np.array([0.0, f_net[1], 0.0])
+            Fp_norm = np.linalg.norm(Fp)#np.sqrt(Fp[0]**2 + Fp[2]**2)
+            # Fn = np.array([0.0, f_net[1], 0.0])
             Fn_norm = f_net[1]
             if Fp_norm < abs(Fn_norm * mu_static): #friction
-                m[3] = m[3] - np.array([f_net[0],0.0,f_net[2]])                
+                m[3] = m[3] - Fp #np.array([f_net[0],0.0,f_net[2]])                
             else:
-                dirFn = mu_kinetic*Fn_norm*np.array([f_net[0], 0.0, f_net[2]])/Fp_norm #friction
-                m[3] = m[3] - np.array([dirFn[0],0.0,dirFn[2]])
+                dirFn = mu_kinetic*Fn_norm*Fp/Fp_norm #friction
+                m[3] = m[3] - dirFn #np.array([dirFn[0],0.0,dirFn[2]])
 
             if m[0][1] < floor: #floor reaction force
                 ry = 10000*(abs(m[0][1] - floor))
-                m[3] = m[3] + np.array([0,ry,0])
+                m[3][1] = m[3][1] + ry
         integrate_fast(m,increment)
 
 @njit()
-def integrate_fast(mass,increment):
+def integrate_fast(mass, increment):
     mass[2] = mass[3]/0.1
     mass[1] = mass[1] + mass[2]*increment
-    mass[1] = mass[1] * 0.9985
+    mass[1] = mass[1] * 0.996
     mass[0] = mass[0] + mass[1]*increment
     mass[3] = np.array([0.0,0.0,0.0])
 
