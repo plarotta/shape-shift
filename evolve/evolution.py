@@ -10,7 +10,6 @@ import copy
 class Evolution(Simulation):
     def __init__(self, masses=None, springs=None):
         super().__init__(masses, springs)
-        # population = self.initialize_population()
 
     def initialize_population(self, population_size, springs):
         pool = []
@@ -39,8 +38,8 @@ class Evolution(Simulation):
         self.rehome(masses) #reset current state of the masses
         return(np.linalg.norm(np.array([p2[0],0,p2[2]])-np.array([p1[0],0,p1[2]])))
 
-    def mutate_morphology(self, masses,springs,spring_constants):
-        operation = np.random.choice(["Fatten", "Slim"],p=[0.75,0.25])
+    def mutate_morphology(self, masses,springs,spring_constants,p_fatten=0.75):
+        operation = np.random.choice(["Fatten", "Slim"],p=[p_fatten,1-p_fatten])
         if len(masses) < 10 or operation == "Fatten":
             masses2,springs2,spring_constants2 = self.fatten_cube(masses,springs,spring_constants)
         else:
@@ -95,16 +94,16 @@ class Evolution(Simulation):
         num_springs = len(springs)
         individual = np.zeros(3*num_springs).reshape(num_springs,3)
         for s in range(num_springs):
-                b = random.random() *(1 - 0) + 0
-                c = random.random() *(2*np.pi - 0) + 0
-                k = random.random() *(10000 - 0) + 0
+                b = np.random.random() *(1 - 0) + 0
+                c = np.random.random() *(2*np.pi - 0) + 0
+                k = np.random.random() *(10000 - 0) + 0
                 individual[s] = np.array([b,c,k])
         return(individual)
 
     def spawn_spring(self):
-        b = random.random() *(1 - 0) + 0
-        c = random.random() *(2*np.pi - 0) + 0
-        k = random.random() *(10000 - 0) + 0
+        b = np.random.random() *(1 - 0) + 0
+        c = np.random.random() *(2*np.pi - 0) + 0
+        k = np.random.random() *(10000 - 0) + 0
         individual = np.array([b,c,k])
         return(individual)
     
@@ -112,9 +111,9 @@ class Evolution(Simulation):
         if random.choices([True, False], weights=[mutation_rate, 1-mutation_rate], k=1)[0]:
             indiv = copy.deepcopy(individual)
             chosen_s_idx = secrets.choice(range(len(indiv)))
-            newb = indiv[chosen_s_idx][0]+random.random() *(indiv[chosen_s_idx][0]*0.35 + indiv[chosen_s_idx][0]*0.35) - indiv[chosen_s_idx][0]*0.35
-            newc = indiv[chosen_s_idx][1]+random.random() *(indiv[chosen_s_idx][1]*0.35 + indiv[chosen_s_idx][1]*0.35) - indiv[chosen_s_idx][1]*0.35
-            newk = indiv[chosen_s_idx][2]+random.random() *(indiv[chosen_s_idx][2]*0.35 + indiv[chosen_s_idx][2]*0.35) - indiv[chosen_s_idx][2]*0.35
+            newb = indiv[chosen_s_idx][0]+np.random.random() *(indiv[chosen_s_idx][0]*0.35 + indiv[chosen_s_idx][0]*0.35) - indiv[chosen_s_idx][0]*0.35
+            newc = indiv[chosen_s_idx][1]+np.random.random() *(indiv[chosen_s_idx][1]*0.35 + indiv[chosen_s_idx][1]*0.35) - indiv[chosen_s_idx][1]*0.35
+            newk = indiv[chosen_s_idx][2]+np.random.random() *(indiv[chosen_s_idx][2]*0.35 + indiv[chosen_s_idx][2]*0.35) - indiv[chosen_s_idx][2]*0.35
             indiv[chosen_s_idx] = (newb, newc, newk)
             return(indiv)
         else:

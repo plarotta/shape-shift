@@ -13,7 +13,6 @@ def initialize_scene(masses,springs,z):
     # walls
       
     scene = canvas(width=1200,height=750,background=color.black)
-    # scene.camera.pos = vector(5,25,5)
     v = wtext(text="0 m/s")  
     
     floor = box(pos=vector(0.5,z-0.06,0), height=0.02, length=100, width=100,color=color.white)
@@ -25,13 +24,19 @@ def initialize_scene(masses,springs,z):
     m_plots = []
     
     for mass in masses:
-        m_temp = sphere(pos=vector(mass[0][0],mass[0][1],mass[0][2]), radius=0.06, color=color.green)
+        m_temp = sphere(pos=vector(mass[0][0],mass[0][1],mass[0][2]), 
+                        radius=0.06, 
+                        color=color.green)
         m_plots.append(m_temp)
     s_plots = []
     for spring in springs:
         m1_pos = masses[int(spring[0][0])][0]
         m2_pos = masses[int(spring[0][1])][0]
-        s_temp = cylinder(pos=vector(m1_pos[0], m1_pos[1], m1_pos[2]), axis=vector(m2_pos[0]-m1_pos[0], m2_pos[1]-m1_pos[1], m2_pos[2]-m1_pos[2]), length=get_spring_l_fast(masses,spring),color=color.red, radius=0.01)
+        s_temp = cylinder(pos=vector(m1_pos[0], m1_pos[1], m1_pos[2]), 
+                          axis=vector(m2_pos[0]-m1_pos[0], m2_pos[1]-m1_pos[1], m2_pos[2]-m1_pos[2]), 
+                          length=get_spring_l_fast(masses,spring),
+                          color=color.red, 
+                          radius=0.01)
         s_plots.append(s_temp)
     COM_pos = get_COM_fast(masses)
     COM = sphere(pos=vector(COM_pos[0],COM_pos[1],COM_pos[2]), radius=0.06, color=color.yellow)
