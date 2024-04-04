@@ -29,20 +29,19 @@ def interact_fast(springs,masses,t,increment,mu_static,mu_kinetic,floor=-4):
         masses[int(s[0][0])][3] = masses[int(s[0][0])][3] + f_full
         masses[int(s[0][1])][3] = masses[int(s[0][1])][3] - f_full
     for m in masses:   
-        # m[3] = m[3] + np.array([0,-9.81,0]) 
         g = 9.81
         m[3][1] = m[3][1] - g #gravity
         if m[0][1] < floor:
             f_net = m[3]
             Fp = np.array([f_net[0], 0.0, f_net[2]])
-            Fp_norm = np.linalg.norm(Fp)#np.sqrt(Fp[0]**2 + Fp[2]**2)
-            # Fn = np.array([0.0, f_net[1], 0.0])
+            Fp_norm = np.linalg.norm(Fp)
             Fn_norm = f_net[1]
+            
             if Fp_norm < abs(Fn_norm * mu_static): #friction
-                m[3] = m[3] - Fp #np.array([f_net[0],0.0,f_net[2]])                
+                m[3] = m[3] - Fp               
             else:
                 dirFn = mu_kinetic*Fn_norm*Fp/Fp_norm #friction
-                m[3] = m[3] - dirFn #np.array([dirFn[0],0.0,dirFn[2]])
+                m[3] = m[3] - dirFn
 
             if m[0][1] < floor: #floor reaction force
                 ry = 10000*(abs(m[0][1] - floor))

@@ -1,6 +1,8 @@
 .venv/
 .vscode/
 .idea/
+.pytest_cache/
+.DS_Store
 
 __pycache__
 *.pkl

@@ -9,19 +9,18 @@ sys.path.append(os.getcwd())
 from simulate.fast_utils import get_COM_fast, get_spring_l_fast
 
 
-def initialize_scene(masses,springs,z, breath=False):
+def initialize_scene(masses,springs,z):
     # walls
       
     scene = canvas(width=1200,height=750,background=color.black)
     # scene.camera.pos = vector(5,25,5)
     v = wtext(text="0 m/s")  
     
-    if not breath:
-        floor = box(pos=vector(0.5,z-0.06,0), height=0.02, length=100, width=100,color=color.white)
-        for x in range(-50,53,3):
-            gridx = curve(pos=[vector(x,z-0.06,50),vector(x,z-0.06,-50)],color=color.black)
-        for y in range(-50,53,3):
-            gridx = curve(pos=[vector(50,z-0.06,y),vector(-50,z-0.06,y)],color=color.black)
+    floor = box(pos=vector(0.5,z-0.06,0), height=0.02, length=100, width=100,color=color.white)
+    for x in range(-50,53,3):
+        gridx = curve(pos=[vector(x,z-0.06,50),vector(x,z-0.06,-50)],color=color.black)
+    for y in range(-50,53,3):
+        gridx = curve(pos=[vector(50,z-0.06,y),vector(-50,z-0.06,y)],color=color.black)
    
     m_plots = []
     
