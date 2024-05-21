@@ -126,7 +126,11 @@ class Evolution(Simulation):
         indices = np.random.choice(indices,size=2, p=probabilities, replace=False)
         chosen_ones = [population_pool[c] for c in indices]
         return(chosen_ones,indices)
+    
+    def roulette_wheel_selection(self, fitnesses, population_pool):
+        pass
 
+    
     def breed_v3(self, parents,parent_indices, pool_masses, pool_springs):
         p1,p2 = parents
         n1 = secrets.choice(range(1,len(p1)))
