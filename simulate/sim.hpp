@@ -19,11 +19,16 @@ class Simulation {
     float mu_k;
     float mu_s;
     float T;
-    
+    float t;
+    std::vector<Robot> robots; // Vector to store Robot objects
 
 public:
-    std::vector<Robot> robots; // Vector to store Robot objects
     Simulation (float, int, float, float, float);
     Simulation();
-    void run_simulation();
+    void step();
+    void run_simulation();  
+    float get_sim_t();
+    std::vector<MatrixXd> get_sim_masses();
+    std::vector<MatrixXd> get_sim_springs();
+
 };

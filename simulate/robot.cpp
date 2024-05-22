@@ -161,7 +161,7 @@ Robot::Robot(int a, float c, float d, float e, float f, float g, float h, bool j
 
 // default constructor
 Robot::Robot() {
-    total_masses = 10;
+    total_masses = 8;
     floor_pos = -0.01;
     dt = 0.01;
     mu_s = 0.9;
