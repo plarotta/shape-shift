@@ -18,15 +18,21 @@ class Simulation {
     int num_robots;
     float mu_k;
     float mu_s;
-    float T;
     float t;
+    int masses_per_rob;
+    float floor_pos;
+    float ground_k; 
+    float damping;
+    bool cuda;
     std::vector<Robot> robots; // Vector to store Robot objects
+    
 
 public:
-    Simulation (float, int, float, float, float);
+    Simulation (float, int, float, float, int, float, float, float, bool);
     Simulation();
+    static Simulation def_const(); //default constructor
     void step();
-    void run_simulation();  
+    void run_simulation(float);  
     float get_sim_t();
     std::vector<MatrixXd> get_sim_masses();
     std::vector<MatrixXd> get_sim_springs();

@@ -102,16 +102,24 @@ def visualize_simulation(path_to_sim,floor):
                      sim_logger[timestamps[i]]['speed'])
 
 if __name__ == "__main__":
-    
-    simy = pysim.Simulation()
+    sim_length = 3
+    dt = 0.001
+    num_robots = 1
+    mu_s = .9
+    mu_k = .7
+    masses_per_rob = 13
+    floor_pos = -2
+    ground_k = 10000
+    damping = 0.993
+    cuda = False
+    simy = pysim.Simulation(dt, num_robots, mu_s, mu_k, masses_per_rob, floor_pos, ground_k, damping, cuda)
 
     # set the scene
-    initialize_scene(-1)
+    initialize_scene(floor_pos)
     m_ob, s_ob, com_ob = update_robot_viz(simy.get_sim_masses()[0], simy.get_sim_springs()[0])
-    sim_length = 3
-    time_step = 0.001
+    
     time.sleep(4)
-    for i,t in enumerate(np.arange(0, sim_length, time_step)):
+    for i,t in enumerate(np.arange(0, sim_length, dt)):
         print(f'SIM TIME: {simy.get_sim_t()}')
         rate(50)
         simy.step()
