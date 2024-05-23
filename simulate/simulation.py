@@ -115,7 +115,8 @@ def main(sim, sim_length, time_step):
         #     sim.step(t)
         sim.step()
         print(f'SIM TIME: {sim.get_sim_t()}')
-        # print(sim.get_sim_masses()[0])
+        print(len(sim.get_sim_masses()))
+        # print(sim.get_sim_springs())
         input()
 
 

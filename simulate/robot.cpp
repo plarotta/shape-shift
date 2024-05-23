@@ -1,5 +1,5 @@
 #include "robot.hpp"
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 #include <iostream>
 #include <cmath>
 #include <chrono>
@@ -161,7 +161,7 @@ Robot::Robot(int a, float c, float d, float e, float f, float g, float h, bool j
 
 // default constructor
 Robot::Robot() {
-    total_masses = 8;
+    total_masses = 16;
     floor_pos = -0.01;
     dt = 0.01;
     mu_s = 0.9;

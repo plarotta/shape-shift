@@ -1,6 +1,6 @@
 #ifndef ROBOT_H
 #define ROBOT_H
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 
 using Eigen::MatrixXd;
 using Eigen::Matrix;

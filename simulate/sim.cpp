@@ -1,4 +1,4 @@
-#include <eigen3/Eigen/Dense>
+// #include <Eigen/Dense>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -10,6 +10,9 @@
 #include <vector>
 #include <iomanip>
 #include <pybind11/pybind11.h>
+#include <pybind11/eigen.h>
+#include <pybind11/stl.h>
+
 
 namespace py = pybind11;
 
@@ -34,7 +37,7 @@ Simulation::Simulation (float a, int b, float c, float d, float e) {
 }
 Simulation::Simulation() {
     dt = 0.05;
-    num_robots = 10;
+    num_robots = 1;
     mu_k = 0.7;
     mu_s = 0.8;
     T = 1;

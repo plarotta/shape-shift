@@ -58,19 +58,18 @@ def integrate_fast(mass, increment):
 
 @njit()
 def get_spring_l_fast(masses, spring):
-    m1_idx1 = spring[0][0]
-    m2_idx2 = spring[0][1]
-    m1_p = masses[int(m1_idx1)][0]
-    m2_p = masses[int(m2_idx2)][0]
+    m1_idx1 = spring[0]
+    m2_idx2 = spring[1]
+    m1_p = masses[int(m1_idx1)][0:3]
+    m2_p = masses[int(m2_idx2)][0:3]
     diff = m2_p-m1_p
     return(np.sqrt(diff[0]**2 + diff[1]**2 + diff[2]**2))
 
 @njit()
 def get_COM_fast(masses):
     M = len(masses) * 0.1
-    masses[:,0,0]
-    COMx = np.sum(masses[:,0,0]*0.1)/M
-    COMy = np.sum(masses[:,0,1]*0.1)/M
-    COMz = np.sum(masses[:,0,2]*0.1)/M
+    COMx = np.sum(masses[:,0]*0.1)/M
+    COMy = np.sum(masses[:,1]*0.1)/M
+    COMz = np.sum(masses[:,2]*0.1)/M
     return(np.array([COMx, COMy, COMz]))
 
