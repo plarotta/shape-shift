@@ -49,6 +49,7 @@ void Robot::initialize_masses(int mass_num) {
 }
 
 void Robot::initialize_springs() {
+    // spring[idx] == [m1_idx, m2_idx, rest_l, amplitude, phase_shift, spring_k]
     // row idx == spring idx. col idx == attribute. attributes are m1 idx, m2 idx, and 4 spring constants
     int spring_idx = 0;
     springs = MatrixXd::Zero(total_masses*(total_masses-1)/2, 6);
@@ -56,7 +57,7 @@ void Robot::initialize_springs() {
     for (int i = 0; i < total_masses; ++i){
         for (int j = i+1; j < total_masses; ++j){
             Vector3f diff(masses.row(j).segment(0,3).cast<float>()-masses.row(i).segment(0,3).cast<float>());
-            springs.row(spring_idx).segment(0, 6) << i, j, diff.norm(), 0, 0, 10000;
+            springs.row(spring_idx).segment(0, 6) << i, j, diff.norm(), 0, 0, 5000;
             spring_idx += 1;
         }
     }
@@ -111,7 +112,7 @@ void Robot::force_integration() {
                 masses(i, 11) -=  prop_force(2);
             }
             else{
-                Vector3f dir_frict_f_mag = mu_k *normal_force/prop_force_norm * prop_force;
+                Vector3f dir_frict_f_mag = mu_k *normal_force*prop_force/prop_force_norm;
                 masses(i,9) -= dir_frict_f_mag(0);
                 masses(i,11) -= dir_frict_f_mag(2);
             }
@@ -130,9 +131,9 @@ void Robot::force_integration() {
         masses(i, 4) += masses(i,7) * dt;
         masses(i, 5) += masses(i,8) * dt;
         
-        masses(i, 3) += damping; // TODO: make default value for damping 1
-        masses(i, 4) += damping;
-        masses(i, 5) += damping;
+        masses(i, 3) *= damping; // TODO: make default value for damping 1
+        masses(i, 4) *= damping;
+        masses(i, 5) *= damping;
 
         // pos
         masses(i, 0) += masses(i,3) * dt;
@@ -161,9 +162,9 @@ Robot::Robot(int a, float c, float d, float e, float f, float g, float h, bool j
 
 // default constructor
 Robot::Robot() {
-    total_masses = 16;
-    floor_pos = -0.01;
-    dt = 0.01;
+    total_masses = 8;
+    floor_pos = -1;
+    dt = 0.001;
     mu_s = 0.9;
     mu_k = 0.7;
     ground_k = 10000;

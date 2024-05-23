@@ -21,7 +21,7 @@ def initialize_scene(z):
     for y in range(-50,53,3):
         gridx = curve(pos=[vector(50,z-0.06,y),vector(-50,z-0.06,y)],color=color.black)
 
-def plot_robot_masses(robot_masses, mass_plots=None, COM_plot=None, offset_x=0,offset_z=0):
+def plot_robot_masses(robot_masses, mass_plots=None, COM_plots=None, offset_x=0,offset_z=0):
     if mass_plots is None:
         mass_plots = []
         for mass in robot_masses:
@@ -35,7 +35,7 @@ def plot_robot_masses(robot_masses, mass_plots=None, COM_plot=None, offset_x=0,o
         for idx,m in enumerate(mass_plots):
             m.pos = vector(robot_masses[idx][0], robot_masses[idx][1], robot_masses[idx][2])
         COM_pos = get_COM_fast(robot_masses)
-        COM_plot.pos = vector(COM_pos[0],COM_pos[1],COM_pos[2])
+        COM_plots.pos = vector(COM_pos[0],COM_pos[1],COM_pos[2])
     return(mass_plots, COM_plots)
 
 def plot_robot_springs(robot_springs, robot_masses, spring_plots=None, offset_x=0, offset_y=0):
@@ -73,13 +73,12 @@ def update_scene(masses, springs, m_plots, s_plots, COM,v,speed):
     COM.pos = vector(COM_pos[0],COM_pos[1],COM_pos[2])
     v.text = str(str(round(speed,3))+" m/s")
 
-def update_viz(sim_masses, sim_springs, mass_plots, spring_plots, COM_plots, velocity_plots, speed_plots):
-    if len(sim_masses) == 1:
-        mass_plots, COM_plots = plot_robot_masses(sim_masses[0], mass_plots, COM_plots)
-        spring_plots = plot_robot_springs(sim_springs[0], sim_masses[0], spring_plots)
-    else:
-        # TODO: generalize for N robots (need offsets so the robots aren't plotted on top of each other)
-        pass
+def update_robot_viz(robot_masses, robot_springs, mass_plots=None, spring_plots=None, COM_plots=None):
+    mass_plots, COM_plots = plot_robot_masses(robot_masses, mass_plots, COM_plots)
+    spring_plots = plot_robot_springs(robot_springs, robot_masses, spring_plots)
+    COM_pos = get_COM_fast(robot_masses)
+    COM_plots.pos = vector(COM_pos[0],COM_pos[1],COM_pos[2])
+    return(mass_plots, spring_plots, COM_plots)
 
 
 def visualize_simulation(path_to_sim,floor):
@@ -107,31 +106,14 @@ if __name__ == "__main__":
     simy = pysim.Simulation()
 
     # set the scene
-    initialize_scene(0)
-    m_ob, com_ob = plot_robot_masses(simy.get_sim_masses()[0])
-    s_ob = plot_robot_springs(simy.get_sim_springs()[0], simy.get_sim_masses()[0])
-    sim_length = 1
-    time_step = 0.1
+    initialize_scene(-1)
+    m_ob, s_ob, com_ob = update_robot_viz(simy.get_sim_masses()[0], simy.get_sim_springs()[0])
+    sim_length = 3
+    time_step = 0.001
+    time.sleep(4)
     for i,t in enumerate(np.arange(0, sim_length, time_step)):
+        print(f'SIM TIME: {simy.get_sim_t()}')
         rate(50)
-
-    # # if i % log_k == 0:
-    # #     # p1 = self.get_COM(self.masses)
-    # #     sim.step(t)
-    # #     # p2 = self.get_COM(self.masses)
-    # #     # displacement = np.linalg.norm(np.array([p2[0],0,p2[2]])-np.array([p1[0],0,p1[2]]))
-    # #     # speed = displacement/time_step
-    # #     # self.sim_log[t] = {
-    # #     #     'masses': np.copy(self.masses),
-    # #     #     'springs': np.copy(self.springs),
-    # #     #     'speed': speed
-    # #     # }
-    # # else:
-    # #     sim.step(t)
-    #     sim.step()
-    #     print(f'SIM TIME: {sim.get_sim_t()}')
-    #     print(len(sim.get_sim_masses()))
-    #     # print(sim.get_sim_springs())
-    #     input()
-
+        simy.step()
+        m_ob, s_ob, com_ob = update_robot_viz(simy.get_sim_masses()[0], simy.get_sim_springs()[0], m_ob, s_ob, com_ob)
     

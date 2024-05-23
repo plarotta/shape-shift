@@ -35,8 +35,11 @@ Simulation::Simulation (float a, int b, float c, float d, float e) {
         robots[i] = Robot();
     }
 }
+
+// Simulation::Simulation() {}
+
 Simulation::Simulation() {
-    dt = 0.05;
+    dt = 0.001;
     num_robots = 1;
     mu_k = 0.7;
     mu_s = 0.8;
